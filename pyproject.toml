@@ -1,0 +1,27 @@
+[project]
+name = "discord-music-bot"
+version = "1.0.0"
+description = "A Discord music bot for playing local audio files and streaming from YouTube with playlist support"
+authors = [
+    {name = "Your Name", email = "your.email@example.com"}
+]
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+
+dependencies = [
+    "discord.py[voice]>=2.3.0",
+    "yt-dlp>=2023.3.4",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+]
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["bot"]

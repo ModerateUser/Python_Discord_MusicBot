@@ -1,0 +1,54 @@
+# Bot configuration - DO NOT COMMIT YOUR TOKEN
+config.json
+
+# Playlists (optional - remove this line if you want to version control playlists)
+playlists.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+ENV/
+env/
+.venv
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Audio files (if you don't want to track music in git)
+# music/
+# *.mp3
+# *.wav
+# *.flac
+# *.ogg
