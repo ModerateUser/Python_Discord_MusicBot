@@ -1,18 +1,35 @@
 """
-Audio streaming and playback service
-Handles YouTube downloads and audio source creation
+Audio streaming and playback service - FIXED VERSION
+FIX #15: FFmpeg path validation and error handling
+FIX #16: Timeout handling for yt-dlp operations
 """
 import discord
 import yt_dlp
 import asyncio
 import logging
 import shutil
+import os
 from typing import Optional
+from pathlib import Path
 
 logger = logging.getLogger('discord_bot')
 
+# Timeout constants
+YTDL_TIMEOUT = 30  # seconds
+SEARCH_TIMEOUT = 20  # seconds
+
+
+class AudioServiceError(Exception):
+    """Custom exception for audio service errors"""
+    pass
+
+
 class AudioService:
-    """Handles audio streaming and source creation"""
+    """
+    Handles audio streaming and source creation
+    FIX #15: Proper FFmpeg validation
+    FIX #16: Timeout handling for all operations
+    """
     
     # yt-dlp options with better error handling
     YTDL_OPTIONS = {
@@ -30,6 +47,7 @@ class AudioService:
         'extract_flat': False,
         'age_limit': None,
         'geo_bypass': True,
+        'socket_timeout': 10,  # FIX #16: Add socket timeout
     }
     
     # FFmpeg options with reconnect support for streaming
@@ -41,35 +59,125 @@ class AudioService:
     def __init__(self):
         self.ytdl = yt_dlp.YoutubeDL(self.YTDL_OPTIONS)
         self.ffmpeg_path = self._find_ffmpeg()
+        self._ffmpeg_validated = False
         
+        # FIX #15: Validate FFmpeg on initialization
         if not self.ffmpeg_path:
-            logger.warning("FFmpeg not found in PATH. Audio playback may fail.")
+            logger.error(
+                "FFmpeg not found in PATH or common locations.\n"
+                "Audio playback will not work. Please install FFmpeg:\n"
+                "  - Windows: Download from https://ffmpeg.org/download.html\n"
+                "  - Linux: sudo apt install ffmpeg\n"
+                "  - macOS: brew install ffmpeg"
+            )
         else:
-            logger.info(f"FFmpeg found at: {self.ffmpeg_path}")
+            self._validate_ffmpeg()
     
     def _find_ffmpeg(self) -> Optional[str]:
-        """Find FFmpeg executable in system PATH"""
+        """
+        Find FFmpeg executable in system PATH
+        FIX #15: More comprehensive search
+        """
+        # Try system PATH first
         ffmpeg = shutil.which('ffmpeg')
         if ffmpeg:
+            logger.info(f"FFmpeg found in PATH: {ffmpeg}")
             return ffmpeg
         
         # Try common Windows locations
-        import os
-        common_paths = [
-            r'C:\ffmpeg\bin\ffmpeg.exe',
-            r'C:\Program Files\ffmpeg\bin\ffmpeg.exe',
-            r'C:\Program Files (x86)\ffmpeg\bin\ffmpeg.exe',
-        ]
+        if os.name == 'nt':  # Windows
+            common_paths = [
+                r'C:\ffmpeg\bin\ffmpeg.exe',
+                r'C:\Program Files\ffmpeg\bin\ffmpeg.exe',
+                r'C:\Program Files (x86)\ffmpeg\bin\ffmpeg.exe',
+                os.path.expanduser(r'~\ffmpeg\bin\ffmpeg.exe'),
+            ]
+            
+            for path in common_paths:
+                if os.path.exists(path):
+                    logger.info(f"FFmpeg found at: {path}")
+                    return path
         
-        for path in common_paths:
-            if os.path.exists(path):
-                return path
+        # Try common Unix locations
+        else:
+            common_paths = [
+                '/usr/bin/ffmpeg',
+                '/usr/local/bin/ffmpeg',
+                '/opt/ffmpeg/bin/ffmpeg',
+                os.path.expanduser('~/bin/ffmpeg'),
+            ]
+            
+            for path in common_paths:
+                if os.path.exists(path):
+                    logger.info(f"FFmpeg found at: {path}")
+                    return path
         
+        logger.warning("FFmpeg not found in PATH or common locations")
         return None
+    
+    def _validate_ffmpeg(self) -> bool:
+        """
+        Validate that FFmpeg is executable and working
+        FIX #15: Test FFmpeg before use
+        
+        Returns:
+            True if FFmpeg is valid, False otherwise
+        """
+        if not self.ffmpeg_path:
+            return False
+        
+        try:
+            # Check if file exists and is executable
+            ffmpeg_file = Path(self.ffmpeg_path)
+            if not ffmpeg_file.exists():
+                logger.error(f"FFmpeg path does not exist: {self.ffmpeg_path}")
+                return False
+            
+            if not os.access(self.ffmpeg_path, os.X_OK):
+                logger.error(f"FFmpeg is not executable: {self.ffmpeg_path}")
+                return False
+            
+            # Try to run FFmpeg to verify it works
+            import subprocess
+            result = subprocess.run(
+                [self.ffmpeg_path, '-version'],
+                capture_output=True,
+                timeout=5,
+                text=True
+            )
+            
+            if result.returncode == 0:
+                # Extract version info
+                version_line = result.stdout.split('\n')[0] if result.stdout else "Unknown version"
+                logger.info(f"FFmpeg validated successfully: {version_line}")
+                self._ffmpeg_validated = True
+                return True
+            else:
+                logger.error(f"FFmpeg validation failed with return code {result.returncode}")
+                return False
+                
+        except subprocess.TimeoutExpired:
+            logger.error("FFmpeg validation timed out")
+            return False
+        except Exception as e:
+            logger.error(f"Error validating FFmpeg: {e}", exc_info=True)
+            return False
+    
+    def is_ffmpeg_available(self) -> bool:
+        """
+        Check if FFmpeg is available and validated
+        
+        Returns:
+            True if FFmpeg is ready to use
+        """
+        return self.ffmpeg_path is not None and self._ffmpeg_validated
     
     async def create_ytdl_source(self, url: str, *, loop=None, stream: bool = True):
         """
         Create a YTDLSource from URL with error handling
+        
+        FIX #15: Check FFmpeg before creating source
+        FIX #16: Add timeout to prevent hanging
         
         Args:
             url: YouTube URL or search query
@@ -79,12 +187,21 @@ class AudioService:
         Returns:
             YTDLSource object or None on failure
         """
+        # FIX #15: Validate FFmpeg is available
+        if not self.is_ffmpeg_available():
+            logger.error("Cannot create audio source: FFmpeg is not available")
+            return None
+        
         loop = loop or asyncio.get_event_loop()
         
         try:
-            data = await loop.run_in_executor(
-                None, 
-                lambda: self.ytdl.extract_info(url, download=not stream)
+            # FIX #16: Add timeout to prevent hanging
+            data = await asyncio.wait_for(
+                loop.run_in_executor(
+                    None, 
+                    lambda: self.ytdl.extract_info(url, download=not stream)
+                ),
+                timeout=YTDL_TIMEOUT
             )
             
             if not data:
@@ -110,17 +227,18 @@ class AudioService:
             
             # Create FFmpeg audio source with proper options
             ffmpeg_options = self.FFMPEG_OPTIONS.copy()
-            if self.ffmpeg_path:
-                audio_source = discord.FFmpegPCMAudio(
-                    filename, 
-                    executable=self.ffmpeg_path,
-                    **ffmpeg_options
-                )
-            else:
-                audio_source = discord.FFmpegPCMAudio(filename, **ffmpeg_options)
+            audio_source = discord.FFmpegPCMAudio(
+                filename, 
+                executable=self.ffmpeg_path,
+                **ffmpeg_options
+            )
             
             return YTDLSource(audio_source, data=data)
-            
+        
+        except asyncio.TimeoutError:
+            # FIX #16: Handle timeout gracefully
+            logger.error(f"Timeout extracting info from URL (>{YTDL_TIMEOUT}s): {url}")
+            return None
         except yt_dlp.utils.DownloadError as e:
             logger.error(f"yt-dlp download error for {url}: {e}")
             return None
@@ -131,6 +249,8 @@ class AudioService:
     async def search_youtube(self, query: str, max_results: int = 5) -> Optional[list]:
         """
         Search YouTube and return results
+        
+        FIX #16: Add timeout to prevent hanging
         
         Args:
             query: Search query
@@ -143,9 +263,13 @@ class AudioService:
         loop = asyncio.get_event_loop()
         
         try:
-            info = await loop.run_in_executor(
-                None,
-                lambda: self.ytdl.extract_info(search_query, download=False)
+            # FIX #16: Add timeout to search
+            info = await asyncio.wait_for(
+                loop.run_in_executor(
+                    None,
+                    lambda: self.ytdl.extract_info(search_query, download=False)
+                ),
+                timeout=SEARCH_TIMEOUT
             )
             
             if 'entries' in info and info['entries']:
@@ -153,7 +277,11 @@ class AudioService:
             
             logger.warning(f"No search results for: {query}")
             return None
-            
+        
+        except asyncio.TimeoutError:
+            # FIX #16: Handle search timeout
+            logger.error(f"Search timeout (>{SEARCH_TIMEOUT}s) for query: {query}")
+            return None
         except Exception as e:
             logger.error(f"Search error for '{query}': {e}", exc_info=True)
             return None
@@ -162,29 +290,44 @@ class AudioService:
         """
         Create an audio source from local file
         
+        FIX #15: Validate FFmpeg and file before creating source
+        
         Args:
             filepath: Path to local audio file
             
         Returns:
-            FFmpegPCMAudio source
+            FFmpegPCMAudio source or None on failure
         """
+        # FIX #15: Check FFmpeg availability
+        if not self.is_ffmpeg_available():
+            logger.error("Cannot create local source: FFmpeg is not available")
+            return None
+        
+        # Validate file exists
+        if not os.path.exists(filepath):
+            logger.error(f"Local file does not exist: {filepath}")
+            return None
+        
+        # Validate file is readable
+        if not os.access(filepath, os.R_OK):
+            logger.error(f"Local file is not readable: {filepath}")
+            return None
+        
         try:
             ffmpeg_options = self.FFMPEG_OPTIONS.copy()
             # Remove reconnect options for local files
             ffmpeg_options['before_options'] = ''
             
-            if self.ffmpeg_path:
-                return discord.FFmpegPCMAudio(
-                    filepath,
-                    executable=self.ffmpeg_path,
-                    **ffmpeg_options
-                )
-            else:
-                return discord.FFmpegPCMAudio(filepath, **ffmpeg_options)
+            return discord.FFmpegPCMAudio(
+                filepath,
+                executable=self.ffmpeg_path,
+                **ffmpeg_options
+            )
                 
         except Exception as e:
             logger.error(f"Error creating local source for {filepath}: {e}", exc_info=True)
             return None
+
 
 class YTDLSource(discord.PCMVolumeTransformer):
     """Represents a YouTube audio source with volume control"""
@@ -197,9 +340,10 @@ class YTDLSource(discord.PCMVolumeTransformer):
         self.webpage_url = data.get('webpage_url')
         self.duration = data.get('duration', 0)
         self.uploader = data.get('uploader', 'Unknown')
-        
+    
     def __repr__(self):
         return f"YTDLSource(title='{self.title}', duration={self.duration})"
+
 
 # Global audio service instance
 audio_service = AudioService()
