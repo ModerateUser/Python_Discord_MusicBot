@@ -79,13 +79,19 @@ if not exist "config.json" (
     exit /b 1
 )
 
-REM FIX LAUNCH #1: Check if venv exists and is valid
+REM FIX VENV #1: Set explicit paths for venv executables
+set "VENV_PYTHON=%~dp0venv\Scripts\python.exe"
+set "VENV_PIP=%~dp0venv\Scripts\pip.exe"
 set "USE_VENV=0"
-if exist "venv\Scripts\python.exe" (
-    echo [INFO] Virtual environment found
+
+REM Check if venv exists and is valid
+if exist "%VENV_PYTHON%" (
+    echo [INFO] Virtual environment found: %VENV_PYTHON%
     set "USE_VENV=1"
+    set "PYTHON_CMD=%VENV_PYTHON%"
+    set "PIP_CMD=%VENV_PIP%"
 ) else if exist "venv\" (
-    echo [WARNING] venv folder exists but is incomplete/corrupted
+    echo [WARNING] venv folder exists but python.exe not found
     echo [INFO] Removing incomplete venv...
     rmdir /s /q "venv"
 )
@@ -98,45 +104,56 @@ if not exist "venv\" (
         echo [WARNING] Failed to create virtual environment
         echo [INFO] Will run without venv (using system Python)
         set "USE_VENV=0"
+        set "PYTHON_CMD=python"
+        set "PIP_CMD=pip"
     ) else (
         echo [SUCCESS] Virtual environment created
-        set "USE_VENV=1"
+        REM Verify the venv was created properly
+        if exist "%VENV_PYTHON%" (
+            set "USE_VENV=1"
+            set "PYTHON_CMD=%VENV_PYTHON%"
+            set "PIP_CMD=%VENV_PIP%"
+            echo [SUCCESS] Virtual environment validated
+        ) else (
+            echo [WARNING] venv created but python.exe not found
+            set "USE_VENV=0"
+            set "PYTHON_CMD=python"
+            set "PIP_CMD=pip"
+        )
     )
     echo.
 )
 
-REM Activate virtual environment if available
-if "%USE_VENV%"=="1" (
-    if exist "venv\Scripts\activate.bat" (
-        echo [INFO] Activating virtual environment...
-        call venv\Scripts\activate.bat
-        if errorlevel 1 (
-            echo [WARNING] Failed to activate venv, using system Python
-            set "USE_VENV=0"
-        )
-    ) else (
-        echo [WARNING] venv\Scripts\activate.bat not found
-        echo [INFO] Using system Python instead
-        set "USE_VENV=0"
-    )
-) else (
-    echo [INFO] Using system Python (no venv)
+REM FIX VENV #1: If no venv, use system Python
+if "%USE_VENV%"=="0" (
+    echo [INFO] Using system Python
+    set "PYTHON_CMD=python"
+    set "PIP_CMD=pip"
 )
 
 echo.
 
+REM FIX VENV #1: Display which Python is being used
+echo [INFO] Python executable: %PYTHON_CMD%
+"%PYTHON_CMD%" --version
+echo.
+
 REM Check if requirements are installed
 echo [INFO] Checking dependencies...
-python -c "import discord, yt_dlp" >nul 2>&1
+"%PYTHON_CMD%" -c "import discord, yt_dlp" >nul 2>&1
 if errorlevel 1 (
     echo [SETUP] Installing/updating dependencies...
-    python -m pip install --upgrade pip
-    pip install -r requirements.txt
+    "%PYTHON_CMD%" -m pip install --upgrade pip
+    "%PIP_CMD%" install -r requirements.txt
     if errorlevel 1 (
         echo [ERROR] Failed to install dependencies
         echo.
         echo Try running manually:
-        echo   pip install -r requirements.txt
+        if "%USE_VENV%"=="1" (
+            echo   %PIP_CMD% install -r requirements.txt
+        ) else (
+            echo   pip install -r requirements.txt
+        )
         echo.
         pause
         exit /b 1
@@ -164,7 +181,9 @@ REM Run the bot
 echo [INFO] Starting Discord Music Bot...
 echo ========================================
 echo.
-python bot.py
+
+REM FIX VENV #1: Use explicit Python path
+"%PYTHON_CMD%" bot.py
 
 REM Handle errors
 if errorlevel 1 (
