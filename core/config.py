@@ -1,12 +1,14 @@
 """
 Configuration management with security enhancements - FIXED VERSION
 FIX #12: Config validation timing - graceful error handling
+FIX #2: Added to_dict() method for proper config passing
+FIX #3: Added missing music_synthesis, llm, and llm_config fields
 """
 import json
 import os
 import logging
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 
 # Initialize logger early, before config validation
 logger = logging.getLogger('discord_bot')
@@ -31,6 +33,8 @@ class Config:
     """
     Bot configuration with validation and security features
     FIX #12: Graceful error handling with helpful messages
+    FIX #2: Added to_dict() method
+    FIX #3: Added missing fields
     """
     
     def __init__(self, config_path: str = 'config.json', validate: bool = True) -> None:
@@ -54,6 +58,30 @@ class Config:
         self.max_playlist_size: int = DEFAULT_MAX_PLAYLIST_SIZE
         self.allowed_file_extensions: List[str] = DEFAULT_ALLOWED_EXTENSIONS.copy()
         self.music_directory: Optional[str] = None
+        
+        # FIX #3: Add LLM configuration fields
+        self.llm: Dict[str, Any] = {
+            'enabled': False,
+            'provider': 'openai',
+            'model': 'gpt-3.5-turbo',
+            'api_key': None,
+            'max_tokens': 500,
+            'temperature': 0.7
+        }
+        self.llm_config: Optional[Dict[str, Any]] = None
+        
+        # FIX #3: Add music synthesis configuration
+        self.music_synthesis: Dict[str, Any] = {
+            'enabled': False,
+            'backend': 'disabled',
+            'cache_dir': 'generated_music',
+            'max_cache_size_mb': 1000,
+            'default_duration': 30,
+            'default_quality': 'medium',
+            'suno_api_key': None,
+            'suno_api_url': 'https://api.suno.ai/v1',
+            'musicgen_model': 'facebook/musicgen-small'
+        }
         
         # FIX #12: Track validation state
         self._validated: bool = False
@@ -98,6 +126,7 @@ class Config:
         """
         Load configuration from JSON file
         FIX #12: Detailed error messages for file issues
+        FIX #3: Load LLM and music synthesis config
         """
         try:
             with open(self.config_path, 'r', encoding='utf-8') as f:
@@ -120,6 +149,15 @@ class Config:
                     DEFAULT_ALLOWED_EXTENSIONS.copy()
                 )
                 self.music_directory = data.get('music_directory')
+                
+                # FIX #3: Load LLM configuration
+                if 'llm' in data:
+                    self.llm.update(data['llm'])
+                    self.llm_config = data['llm']
+                
+                # FIX #3: Load music synthesis configuration
+                if 'music_synthesis' in data:
+                    self.music_synthesis.update(data['music_synthesis'])
                 
                 logger.info(f"Configuration loaded from {self.config_path}")
                 
@@ -338,6 +376,27 @@ class Config:
             logger.error(f"Error validating file {filepath}: {e}")
             return False
     
+    def to_dict(self) -> Dict[str, Any]:
+        """
+        FIX #2: Convert config to dictionary for service initialization
+        
+        Returns:
+            Dictionary representation of config
+        """
+        return {
+            'token': self.token,
+            'owner_id': self.owner_id,
+            'playing': self.playing,
+            'command_prefix': self.command_prefix,
+            'max_queue_size': self.max_queue_size,
+            'max_playlist_size': self.max_playlist_size,
+            'allowed_file_extensions': self.allowed_file_extensions,
+            'music_directory': self.music_directory,
+            'llm': self.llm,
+            'llm_config': self.llm_config,
+            'music_synthesis': self.music_synthesis
+        }
+    
     def get_config_template(self) -> str:
         """
         Get a template config.json file content
@@ -353,7 +412,26 @@ class Config:
             "max_queue_size": DEFAULT_MAX_QUEUE_SIZE,
             "max_playlist_size": DEFAULT_MAX_PLAYLIST_SIZE,
             "allowed_file_extensions": DEFAULT_ALLOWED_EXTENSIONS,
-            "music_directory": None
+            "music_directory": None,
+            "llm": {
+                "enabled": False,
+                "provider": "openai",
+                "model": "gpt-3.5-turbo",
+                "api_key": None,
+                "max_tokens": 500,
+                "temperature": 0.7
+            },
+            "music_synthesis": {
+                "enabled": False,
+                "backend": "disabled",
+                "cache_dir": "generated_music",
+                "max_cache_size_mb": 1000,
+                "default_duration": 30,
+                "default_quality": "medium",
+                "suno_api_key": None,
+                "suno_api_url": "https://api.suno.ai/v1",
+                "musicgen_model": "facebook/musicgen-small"
+            }
         }
         return json.dumps(template, indent=4)
 
