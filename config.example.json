@@ -5,6 +5,14 @@
     "command_prefix": "!",
     "max_queue_size": 100,
     "max_playlist_size": 500,
-    "allowed_file_extensions": [".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac", ".opus"],
+    "allowed_file_extensions": [
+        ".mp3",
+        ".wav",
+        ".flac",
+        ".ogg",
+        ".m4a",
+        ".aac",
+        ".opus"
+    ],
     "music_directory": null
 }
