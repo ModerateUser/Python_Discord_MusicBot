@@ -1,9 +1,10 @@
 """
-Dashboard Bridge Service
+Dashboard Bridge Service - PHASE 1 REFACTORED
 Provides real-time communication between Discord bot and web dashboard
 Uses asyncio for same-process integration with minimal overhead
 
 FIX WEBUI #3: Complete bot-dashboard integration
+PHASE 1 TASK 1.1: Real Queue Integration - IMPLEMENTED
 """
 import asyncio
 import logging
@@ -45,7 +46,9 @@ class QueueInfo:
     is_playing: bool
     is_paused: bool
     volume: float
-    loop_mode: str
+    loop_mode: bool
+    queue_length: int
+    voice_channel: Optional[str]
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary"""
@@ -56,6 +59,8 @@ class DashboardBridge:
     """
     Bridge service between Discord bot and web dashboard
     Provides real-time state synchronization and event broadcasting
+    
+    PHASE 1 TASK 1.1: Real Queue Integration - IMPLEMENTED
     """
     
     def __init__(self, bot: commands.Bot):
@@ -70,8 +75,19 @@ class DashboardBridge:
         self._subscribers: List[Callable] = []
         self._state_cache: Dict[str, Any] = {}
         self._update_task: Optional[asyncio.Task] = None
+        self.websocket_manager = None  # Will be set by dashboard app
         
         logger.info("Dashboard Bridge initialized")
+    
+    def set_websocket_manager(self, manager):
+        """
+        Set the WebSocket manager for broadcasting updates
+        
+        Args:
+            manager: WebSocket connection manager from dashboard app
+        """
+        self.websocket_manager = manager
+        logger.info("WebSocket manager registered with dashboard bridge")
     
     async def start(self):
         """Start the bridge service"""
@@ -113,7 +129,7 @@ class DashboardBridge:
     
     async def _broadcast_update(self, update_type: str, data: Dict[str, Any]):
         """
-        Broadcast update to all subscribers
+        Broadcast update to all subscribers and WebSocket clients
         
         Args:
             update_type: Type of update
@@ -122,8 +138,16 @@ class DashboardBridge:
         message = {
             "type": update_type,
             "data": data,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.utcnow().isoformat()
         }
+        
+        # Broadcast to WebSocket clients if manager is available
+        if self.websocket_manager:
+            try:
+                await self.websocket_manager.broadcast(message)
+                logger.debug(f"Broadcast {update_type} to WebSocket clients")
+            except Exception as e:
+                logger.error(f"Error broadcasting to WebSocket: {e}", exc_info=True)
         
         # Call all subscribers
         for callback in self._subscribers[:]:  # Copy list to avoid modification during iteration
@@ -197,112 +221,145 @@ class DashboardBridge:
             total_users=total_users
         )
     
-    async def get_guild_queue(self, guild_id: int) -> Optional[QueueInfo]:
+    def get_guilds(self) -> List[Dict[str, Any]]:
+        """
+        Get list of all guilds the bot is in
+        
+        Returns:
+            List of guild information dictionaries
+        """
+        guilds = []
+        for guild in self.bot.guilds:
+            # Check if bot is in voice channel
+            voice_client = guild.voice_client
+            in_voice = voice_client is not None
+            voice_channel_name = voice_client.channel.name if voice_client else None
+            
+            guilds.append({
+                "id": guild.id,
+                "name": guild.name,
+                "member_count": guild.member_count,
+                "icon_url": str(guild.icon.url) if guild.icon else None,
+                "in_voice": in_voice,
+                "voice_channel": voice_channel_name
+            })
+        
+        return guilds
+    
+    def get_guild_queue(self, guild_id: int) -> Optional[Dict[str, Any]]:
         """
         Get queue information for a guild
+        
+        PHASE 1 TASK 1.1: IMPLEMENTED - Real Queue Integration
+        
+        This method now properly integrates with the Music cog's queue system
+        instead of returning placeholder data.
         
         Args:
             guild_id: Guild ID
             
         Returns:
-            QueueInfo object or None if not found
+            Dictionary with queue information or None if not found
         """
-        guild = self.bot.get_guild(guild_id)
-        if not guild:
-            return None
-        
-        # Get music cog
-        music_cog = self.bot.get_cog('Music')
-        if not music_cog:
-            return None
-        
-        # Get voice client
-        voice_client = guild.voice_client
-        if not voice_client:
-            return None
-        
-        # Get queue manager
-        queue_manager_cog = self.bot.get_cog('QueueManager')
-        if not queue_manager_cog:
-            return None
-        
         try:
-            # Get queue data
-            queue_data = queue_manager_cog.get_queue(guild_id)
-            if not queue_data:
+            # Get guild
+            guild = self.bot.get_guild(guild_id)
+            if not guild:
+                logger.warning(f"Guild {guild_id} not found")
                 return None
             
-            # Get current song
+            # Get Music cog - this is where the actual queue is stored
+            music_cog = self.bot.get_cog('Music')
+            if not music_cog:
+                logger.warning("Music cog not loaded")
+                return None
+            
+            # Get the actual queue from Music cog
+            queue = music_cog.get_queue(guild_id)
+            
+            # Get voice client state
+            voice_client = guild.voice_client
+            is_playing = voice_client.is_playing() if voice_client else False
+            is_paused = voice_client.is_paused() if voice_client else False
+            
+            # Build current song data from queue.current
             current_song = None
-            if hasattr(voice_client, 'source') and voice_client.source:
+            if queue.current:
                 current_song = {
-                    "title": getattr(voice_client.source, 'title', 'Unknown'),
-                    "url": getattr(voice_client.source, 'url', None),
-                    "duration": getattr(voice_client.source, 'duration', 0),
-                    "requester": getattr(voice_client.source, 'requester', 'Unknown')
+                    'title': queue.current.title,
+                    'is_local': queue.current.is_local,
+                    'source': str(queue.current.source) if queue.current.is_local else None
                 }
             
-            # Get queue items
-            queue_items = []
-            for item in queue_data.get('queue', []):
-                queue_items.append({
-                    "title": item.get('title', 'Unknown'),
-                    "url": item.get('url', None),
-                    "duration": item.get('duration', 0),
-                    "requester": item.get('requester', 'Unknown')
+            # Build upcoming songs list from queue
+            upcoming_songs = []
+            for idx, song in enumerate(queue.get_upcoming(limit=50)):
+                upcoming_songs.append({
+                    'title': song.title,
+                    'is_local': song.is_local,
+                    'position': idx
                 })
             
-            return QueueInfo(
-                guild_id=guild_id,
-                guild_name=guild.name,
-                current_song=current_song,
-                queue=queue_items,
-                is_playing=voice_client.is_playing(),
-                is_paused=voice_client.is_paused(),
-                volume=queue_data.get('volume', 1.0),
-                loop_mode=queue_data.get('loop_mode', 'off')
-            )
+            # Return complete queue information
+            return {
+                'guild_id': guild_id,
+                'guild_name': guild.name,
+                'current': current_song,
+                'queue': upcoming_songs,
+                'queue_length': len(queue),
+                'loop': queue.loop,
+                'volume': int(queue.volume * 100),  # Convert to percentage
+                'is_playing': is_playing,
+                'is_paused': is_paused,
+                'voice_channel': voice_client.channel.name if voice_client else None
+            }
+            
         except Exception as e:
             logger.error(f"Error getting queue for guild {guild_id}: {e}", exc_info=True)
             return None
     
-    async def get_all_queues(self) -> List[QueueInfo]:
+    async def get_all_queues(self) -> List[Dict[str, Any]]:
         """
         Get queue information for all guilds
         
         Returns:
-            List of QueueInfo objects
+            List of queue information dictionaries
         """
         queues = []
         for guild in self.bot.guilds:
-            queue_info = await self.get_guild_queue(guild.id)
+            queue_info = self.get_guild_queue(guild.id)
             if queue_info:
                 queues.append(queue_info)
         return queues
     
-    async def execute_command(self, guild_id: int, command: str, **kwargs) -> Dict[str, Any]:
+    async def execute_command(self, guild_id: int, command: str, args: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
         Execute a bot command from the dashboard
         
+        PHASE 1 TASK 1.2: TO BE IMPLEMENTED
+        
         Args:
             guild_id: Guild ID
-            command: Command name
-            **kwargs: Command arguments
+            command: Command name (play, pause, skip, stop, volume, loop)
+            args: Command arguments
             
         Returns:
-            Result dictionary
+            Result dictionary with success status and message
         """
         try:
             guild = self.bot.get_guild(guild_id)
             if not guild:
                 return {"success": False, "error": "Guild not found"}
             
+            music_cog = self.bot.get_cog('Music')
+            if not music_cog:
+                return {"success": False, "error": "Music system not available"}
+            
             # Get voice client
             voice_client = guild.voice_client
-            if not voice_client and command not in ['join', 'play']:
-                return {"success": False, "error": "Bot not in voice channel"}
+            args = args or {}
             
-            # Execute command
+            # Basic command execution (will be enhanced in Phase 1 Task 1.2)
             if command == 'pause':
                 if voice_client and voice_client.is_playing():
                     voice_client.pause()
@@ -324,7 +381,7 @@ class DashboardBridge:
                 return {"success": False, "error": "Nothing is paused"}
             
             elif command == 'skip':
-                if voice_client and voice_client.is_playing():
+                if voice_client and (voice_client.is_playing() or voice_client.is_paused()):
                     voice_client.stop()
                     await self._broadcast_update('command_executed', {
                         "guild_id": guild_id,
@@ -335,27 +392,56 @@ class DashboardBridge:
             
             elif command == 'stop':
                 if voice_client:
+                    # Get queue and clear it
+                    queue = music_cog.get_queue(guild_id)
+                    queue.clear()
+                    
                     voice_client.stop()
-                    await voice_client.disconnect()
                     await self._broadcast_update('command_executed', {
                         "guild_id": guild_id,
                         "command": "stop"
                     })
-                    return {"success": True, "message": "Playback stopped"}
+                    return {"success": True, "message": "Playback stopped and queue cleared"}
                 return {"success": False, "error": "Bot not in voice channel"}
             
             elif command == 'volume':
-                volume = kwargs.get('volume', 1.0)
-                if voice_client and hasattr(voice_client, 'source'):
-                    if hasattr(voice_client.source, 'volume'):
-                        voice_client.source.volume = volume
-                        await self._broadcast_update('command_executed', {
-                            "guild_id": guild_id,
-                            "command": "volume",
-                            "volume": volume
-                        })
-                        return {"success": True, "message": f"Volume set to {int(volume * 100)}%"}
-                return {"success": False, "error": "Cannot change volume"}
+                volume = args.get('volume')
+                if volume is None:
+                    return {"success": False, "error": "Volume parameter required"}
+                
+                try:
+                    vol_int = int(volume)
+                    if not 0 <= vol_int <= 100:
+                        return {"success": False, "error": "Volume must be between 0 and 100"}
+                    
+                    # Update queue volume
+                    queue = music_cog.get_queue(guild_id)
+                    queue.volume = vol_int / 100
+                    
+                    # Apply to current playing source
+                    if voice_client and voice_client.source and hasattr(voice_client.source, 'volume'):
+                        voice_client.source.volume = vol_int / 100
+                    
+                    await self._broadcast_update('command_executed', {
+                        "guild_id": guild_id,
+                        "command": "volume",
+                        "volume": vol_int
+                    })
+                    return {"success": True, "message": f"Volume set to {vol_int}%"}
+                except ValueError:
+                    return {"success": False, "error": "Invalid volume value"}
+            
+            elif command == 'loop':
+                queue = music_cog.get_queue(guild_id)
+                queue.loop = not queue.loop
+                status = 'enabled' if queue.loop else 'disabled'
+                
+                await self._broadcast_update('command_executed', {
+                    "guild_id": guild_id,
+                    "command": "loop",
+                    "enabled": queue.loop
+                })
+                return {"success": True, "message": f"Loop {status}"}
             
             else:
                 return {"success": False, "error": f"Unknown command: {command}"}
@@ -363,6 +449,30 @@ class DashboardBridge:
         except Exception as e:
             logger.error(f"Error executing command {command}: {e}", exc_info=True)
             return {"success": False, "error": str(e)}
+    
+    def get_bot_status_dict(self) -> Optional[Dict[str, Any]]:
+        """
+        Get bot status as dictionary (synchronous version)
+        
+        Returns:
+            Dictionary with bot status or None if bot not ready
+        """
+        if not self.bot.is_ready():
+            return None
+        
+        uptime_seconds = (datetime.now() - self.start_time).total_seconds()
+        hours = int(uptime_seconds // 3600)
+        minutes = int((uptime_seconds % 3600) // 60)
+        
+        return {
+            'connected': True,
+            'status': 'online',
+            'guilds': len(self.bot.guilds),
+            'uptime': f"{hours}h {minutes}m",
+            'latency': round(self.bot.latency * 1000, 2),
+            'user': str(self.bot.user) if self.bot.user else None,
+            'user_id': self.bot.user.id if self.bot.user else None
+        }
     
     async def get_service_health(self) -> Dict[str, bool]:
         """
