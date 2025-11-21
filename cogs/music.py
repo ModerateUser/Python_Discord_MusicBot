@@ -10,6 +10,7 @@ Addresses all critical issues found in testing:
 - Missing cleanup on unload (Issue #8)
 - Cleanup task error handling (Issue #5)
 - FIX #9: Async context handling in callbacks
+- FIX BUG #2: Race condition in should_play logic - use stored decision consistently
 """
 import discord
 from discord.ext import commands
@@ -182,6 +183,7 @@ class Music(commands.Cog):
         FIX #5: Enhanced race condition protection with atomic queue size check
         FIX #6: Security - check file permissions before existence
         FIX #13: Query length validation
+        FIX BUG #2: Store should_play decision and use consistently
         """
         # Validate query length
         if not query or len(query) > MAX_QUERY_LENGTH:
@@ -204,6 +206,9 @@ class Music(commands.Cog):
         guild_id = ctx.guild.id
         queue = self.get_queue(guild_id)
         queue_size_lock = self.get_queue_size_lock(guild_id)
+        
+        # FIX BUG #2: Variable to store the decision made inside the lock
+        should_play = False
         
         # FIX #5: Use dedicated lock for atomic queue size check and add operation
         async with queue_size_lock:
@@ -230,11 +235,9 @@ class Music(commands.Cog):
                         song = Song(query, os.path.basename(query), is_local=True)
                         queue.add(song)
                         
-                        # Check if we should start playing
+                        # FIX BUG #2: Check if we should start playing - store the decision
                         should_play = not ctx.voice_client.is_playing()
                         
-                        if not should_play:
-                            await ctx.send(f'➕ Added to queue: **{song.title}**')
                     except Exception as e:
                         logger.error(f"Error adding local file: {e}", exc_info=True)
                         await ctx.send('❌ Error adding local file to queue')
@@ -259,20 +262,22 @@ class Music(commands.Cog):
                         song = Song(player, player.title, is_local=False)
                         queue.add(song)
                         
-                        # Check if we should start playing
+                        # FIX BUG #2: Check if we should start playing - store the decision
                         should_play = not ctx.voice_client.is_playing()
                         
-                        if not should_play:
-                            await ctx.send(f'➕ Added to queue: **{song.title}**')
-                            
                     except Exception as e:
                         logger.error(f"Play error: {e}", exc_info=True)
                         await ctx.send('❌ Error: Could not play that track')
                         return
         
-        # Start playing if nothing is playing (outside the lock to prevent deadlock)
-        if not ctx.voice_client.is_playing():
+        # FIX BUG #2: Use the stored decision (don't re-check is_playing)
+        # This prevents race conditions where another command starts playback between checks
+        if should_play:
+            # Start playback
             await self._play_next(ctx)
+        else:
+            # Only send "added to queue" if we're NOT starting playback
+            await ctx.send(f'➕ Added to queue: **{song.title}**')
     
     async def _play_next(self, ctx: commands.Context, retry_count: int = 0):
         """
