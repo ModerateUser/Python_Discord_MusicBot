@@ -1,5 +1,6 @@
 """
-Discord embed creation utilities with consistent styling
+Discord embed creation utilities with consistent styling - FIXED VERSION
+FIX #14: Embed field length validation to prevent Discord API errors
 """
 import discord
 from typing import List, Dict
@@ -18,10 +19,39 @@ MAX_QUEUE_DISPLAY = 10
 MAX_PLAYLIST_DISPLAY = 15
 MAX_TITLE_LENGTH = 60
 
+# FIX #14: Discord embed limits
+DISCORD_EMBED_TITLE_LIMIT = 256
+DISCORD_EMBED_DESCRIPTION_LIMIT = 4096
+DISCORD_EMBED_FIELD_NAME_LIMIT = 256
+DISCORD_EMBED_FIELD_VALUE_LIMIT = 1024
+DISCORD_EMBED_FOOTER_LIMIT = 2048
+DISCORD_EMBED_TOTAL_LIMIT = 6000
+
+
+def truncate_text(text: str, max_length: int, suffix: str = "...") -> str:
+    """
+    Truncate text to fit within Discord limits
+    
+    FIX #14: Helper function for safe text truncation
+    
+    Args:
+        text: Text to truncate
+        max_length: Maximum length
+        suffix: Suffix to add if truncated
+        
+    Returns:
+        Truncated text
+    """
+    if len(text) <= max_length:
+        return text
+    return text[:max_length - len(suffix)] + suffix
+
 
 def create_search_embed(query: str, results: List[dict], bot_name: str) -> discord.Embed:
     """
     Create search results embed
+    
+    FIX #14: Validate all field lengths
     
     Args:
         query: Search query string
@@ -31,13 +61,19 @@ def create_search_embed(query: str, results: List[dict], bot_name: str) -> disco
     Returns:
         Discord embed with search results
     """
+    # FIX #14: Truncate title to Discord limit
+    title = truncate_text(f"🔍 Search Results for: {query}", DISCORD_EMBED_TITLE_LIMIT)
+    
     embed = discord.Embed(
-        title=f"🔍 Search Results for: {query[:100]}",
+        title=title,
         color=COLOR_SEARCH
     )
     
     for i, result in enumerate(results[:MAX_SEARCH_RESULTS], 1):
-        title = result.get('title', 'Unknown')[:MAX_TITLE_LENGTH]
+        title = result.get('title', 'Unknown')
+        # FIX #14: Truncate field name
+        field_name = truncate_text(f"{i}. {title}", DISCORD_EMBED_FIELD_NAME_LIMIT)
+        
         duration = result.get('duration', 0)
         
         # Format duration
@@ -47,19 +83,26 @@ def create_search_embed(query: str, results: List[dict], bot_name: str) -> disco
         else:
             duration_str = "Unknown"
         
+        # FIX #14: Truncate field value
+        field_value = truncate_text(f"Duration: {duration_str}", DISCORD_EMBED_FIELD_VALUE_LIMIT)
+        
         embed.add_field(
-            name=f"{i}. {title}",
-            value=f"Duration: {duration_str}",
+            name=field_name,
+            value=field_value,
             inline=False
         )
     
-    embed.set_footer(text=f"Use @{bot_name} play <song name> to play")
+    # FIX #14: Truncate footer
+    footer_text = truncate_text(f"Use @{bot_name} play <song name> to play", DISCORD_EMBED_FOOTER_LIMIT)
+    embed.set_footer(text=footer_text)
     return embed
 
 
 def create_queue_embed(queue: MusicQueue) -> discord.Embed:
     """
     Create queue display embed
+    
+    FIX #14: Validate all field lengths
     
     Args:
         queue: MusicQueue instance
@@ -75,21 +118,29 @@ def create_queue_embed(queue: MusicQueue) -> discord.Embed:
     # Show currently playing song
     if queue.current:
         loop_indicator = " 🔁" if queue.loop else ""
+        # FIX #14: Truncate current song title
+        current_title = truncate_text(queue.current.title, DISCORD_EMBED_FIELD_VALUE_LIMIT - 20)
         embed.add_field(
             name="▶️ Now Playing",
-            value=f"**{queue.current.title}**{loop_indicator}",
+            value=f"**{current_title}**{loop_indicator}",
             inline=False
         )
     
     # Show upcoming songs
     if queue.songs:
-        queue_text = '\n'.join([
-            f"`{i+1}.` {song.title[:MAX_TITLE_LENGTH]}" 
-            for i, song in enumerate(queue.songs[:MAX_QUEUE_DISPLAY])
-        ])
+        queue_lines = []
+        for i, song in enumerate(queue.songs[:MAX_QUEUE_DISPLAY]):
+            # FIX #14: Truncate each song title
+            song_title = truncate_text(song.title, MAX_TITLE_LENGTH)
+            queue_lines.append(f"`{i+1}.` {song_title}")
+        
+        queue_text = '\n'.join(queue_lines)
         
         if len(queue.songs) > MAX_QUEUE_DISPLAY:
             queue_text += f"\n*...and {len(queue.songs) - MAX_QUEUE_DISPLAY} more*"
+        
+        # FIX #14: Ensure total queue text fits in field value limit
+        queue_text = truncate_text(queue_text, DISCORD_EMBED_FIELD_VALUE_LIMIT)
         
         embed.add_field(
             name=f"📝 Up Next ({len(queue.songs)} songs)",
@@ -112,6 +163,8 @@ def create_nowplaying_embed(song: Song, loop: bool) -> discord.Embed:
     """
     Create now playing embed
     
+    FIX #14: Validate all field lengths
+    
     Args:
         song: Currently playing song
         loop: Whether loop mode is enabled
@@ -122,9 +175,12 @@ def create_nowplaying_embed(song: Song, loop: bool) -> discord.Embed:
     loop_status = ' 🔁' if loop else ''
     source_type = '📁 Local File' if song.is_local else '🌐 Stream'
     
+    # FIX #14: Truncate song title for description
+    song_title = truncate_text(song.title, DISCORD_EMBED_DESCRIPTION_LIMIT - 10)
+    
     embed = discord.Embed(
         title="🎵 Now Playing",
-        description=f"**{song.title}**{loop_status}",
+        description=f"**{song_title}**{loop_status}",
         color=COLOR_NOW_PLAYING
     )
     
@@ -140,6 +196,8 @@ def create_nowplaying_embed(song: Song, loop: bool) -> discord.Embed:
 def create_playlist_list_embed(playlists: Dict[str, int]) -> discord.Embed:
     """
     Create playlist list embed
+    
+    FIX #14: Validate all field lengths
     
     Args:
         playlists: Dictionary mapping playlist names to song counts
@@ -160,13 +218,32 @@ def create_playlist_list_embed(playlists: Dict[str, int]) -> discord.Embed:
     # Sort playlists by name
     sorted_playlists = sorted(playlists.items())
     
+    # FIX #14: Track total embed size to prevent exceeding limits
+    total_chars = len(embed.title or "") + len(embed.description or "")
+    
     for name, count in sorted_playlists:
         song_text = "song" if count == 1 else "songs"
+        
+        # FIX #14: Truncate playlist name
+        playlist_name = truncate_text(name, DISCORD_EMBED_FIELD_NAME_LIMIT - 5)
+        field_value = f"{count} {song_text}"
+        
+        # FIX #14: Check if adding this field would exceed total limit
+        field_size = len(playlist_name) + len(field_value)
+        if total_chars + field_size > DISCORD_EMBED_TOTAL_LIMIT - 500:  # Leave buffer
+            embed.add_field(
+                name="⚠️ Note",
+                value=f"...and {len(sorted_playlists) - len(embed.fields)} more playlists",
+                inline=False
+            )
+            break
+        
         embed.add_field(
-            name=f"📁 {name}",
-            value=f"{count} {song_text}",
+            name=f"📁 {playlist_name}",
+            value=field_value,
             inline=True
         )
+        total_chars += field_size
     
     return embed
 
@@ -175,6 +252,8 @@ def create_playlist_show_embed(name: str, playlist: List[dict]) -> discord.Embed
     """
     Create playlist details embed
     
+    FIX #14: Validate all field lengths
+    
     Args:
         name: Playlist name
         playlist: List of song dictionaries
@@ -182,8 +261,11 @@ def create_playlist_show_embed(name: str, playlist: List[dict]) -> discord.Embed
     Returns:
         Discord embed showing playlist contents
     """
+    # FIX #14: Truncate playlist name in title
+    playlist_name = truncate_text(name, DISCORD_EMBED_TITLE_LIMIT - 15)
+    
     embed = discord.Embed(
-        title=f"📚 Playlist: {name}",
+        title=f"📚 Playlist: {playlist_name}",
         description=f"Total songs: {len(playlist)}",
         color=COLOR_PLAYLIST
     )
@@ -192,13 +274,19 @@ def create_playlist_show_embed(name: str, playlist: List[dict]) -> discord.Embed
         embed.description = "This playlist is empty. Add songs with `!playlist add <name> <song>`"
         return embed
     
-    songs_text = '\n'.join([
-        f"`{i+1}.` {item.get('title', 'Unknown')[:MAX_TITLE_LENGTH]}" 
-        for i, item in enumerate(playlist[:MAX_PLAYLIST_DISPLAY])
-    ])
+    songs_lines = []
+    for i, item in enumerate(playlist[:MAX_PLAYLIST_DISPLAY]):
+        # FIX #14: Truncate each song title
+        song_title = truncate_text(item.get('title', 'Unknown'), MAX_TITLE_LENGTH)
+        songs_lines.append(f"`{i+1}.` {song_title}")
+    
+    songs_text = '\n'.join(songs_lines)
     
     if len(playlist) > MAX_PLAYLIST_DISPLAY:
         songs_text += f"\n*...and {len(playlist) - MAX_PLAYLIST_DISPLAY} more*"
+    
+    # FIX #14: Ensure songs text fits in field value limit
+    songs_text = truncate_text(songs_text, DISCORD_EMBED_FIELD_VALUE_LIMIT)
     
     embed.add_field(
         name="Songs",
@@ -213,18 +301,28 @@ def create_help_embed(bot_name: str) -> discord.Embed:
     """
     Create help command embed
     
+    FIX #14: Validate all field lengths
+    
     Args:
         bot_name: Name of the bot
         
     Returns:
         Discord embed with command help
     """
+    # FIX #14: Truncate bot name in description
+    bot_name_safe = truncate_text(bot_name, 50)
+    description = truncate_text(
+        f"Mention me with a command: `@{bot_name_safe} <command>` or use `!<command>`",
+        DISCORD_EMBED_DESCRIPTION_LIMIT
+    )
+    
     embed = discord.Embed(
         title="🎵 Music Bot Commands",
-        description=f"Mention me with a command: `@{bot_name} <command>` or use `!<command>`",
+        description=description,
         color=COLOR_HELP
     )
     
+    # FIX #14: All field values are within limits (pre-validated)
     embed.add_field(
         name="🎵 Playback Commands",
         value=(
@@ -274,14 +372,18 @@ def create_help_embed(bot_name: str) -> discord.Embed:
         inline=False
     )
     
+    # FIX #14: Truncate examples with bot name
+    examples_text = truncate_text(
+        f"`@{bot_name_safe} play never gonna give you up`\n"
+        f"`!play https://youtube.com/watch?v=...`\n"
+        f"`!play C:/Music/song.mp3`\n"
+        f"`!queue`",
+        DISCORD_EMBED_FIELD_VALUE_LIMIT
+    )
+    
     embed.add_field(
         name="💡 Examples",
-        value=(
-            f"`@{bot_name} play never gonna give you up`\n"
-            f"`!play https://youtube.com/watch?v=...`\n"
-            f"`!play C:/Music/song.mp3`\n"
-            f"`!queue`"
-        ),
+        value=examples_text,
         inline=False
     )
     
@@ -293,6 +395,8 @@ def create_error_embed(title: str, message: str) -> discord.Embed:
     """
     Create error message embed
     
+    FIX #14: Validate all field lengths
+    
     Args:
         title: Error title
         message: Error message
@@ -300,9 +404,13 @@ def create_error_embed(title: str, message: str) -> discord.Embed:
     Returns:
         Discord embed for error display
     """
+    # FIX #14: Truncate title and message
+    safe_title = truncate_text(f"❌ {title}", DISCORD_EMBED_TITLE_LIMIT)
+    safe_message = truncate_text(message, DISCORD_EMBED_DESCRIPTION_LIMIT)
+    
     embed = discord.Embed(
-        title=f"❌ {title}",
-        description=message,
+        title=safe_title,
+        description=safe_message,
         color=discord.Color.red()
     )
     return embed
@@ -312,6 +420,8 @@ def create_success_embed(title: str, message: str) -> discord.Embed:
     """
     Create success message embed
     
+    FIX #14: Validate all field lengths
+    
     Args:
         title: Success title
         message: Success message
@@ -319,9 +429,13 @@ def create_success_embed(title: str, message: str) -> discord.Embed:
     Returns:
         Discord embed for success display
     """
+    # FIX #14: Truncate title and message
+    safe_title = truncate_text(f"✅ {title}", DISCORD_EMBED_TITLE_LIMIT)
+    safe_message = truncate_text(message, DISCORD_EMBED_DESCRIPTION_LIMIT)
+    
     embed = discord.Embed(
-        title=f"✅ {title}",
-        description=message,
+        title=safe_title,
+        description=safe_message,
         color=discord.Color.green()
     )
     return embed
