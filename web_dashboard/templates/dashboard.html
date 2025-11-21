@@ -6,7 +6,7 @@
 <!-- Status Cards -->
 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
     <!-- Bot Status -->
-    <div class="card bg-gray-800 rounded-lg shadow-lg p-6">
+    <div class="card bg-gray-900 rounded-lg shadow-lg p-6 border border-gray-800">
         <div class="flex items-center justify-between">
             <div>
                 <p class="text-gray-400 text-sm">Bot Status</p>
@@ -17,7 +17,7 @@
     </div>
 
     <!-- Guilds -->
-    <div class="card bg-gray-800 rounded-lg shadow-lg p-6">
+    <div class="card bg-gray-900 rounded-lg shadow-lg p-6 border border-gray-800">
         <div class="flex items-center justify-between">
             <div>
                 <p class="text-gray-400 text-sm">Servers</p>
@@ -28,7 +28,7 @@
     </div>
 
     <!-- Active Queues -->
-    <div class="card bg-gray-800 rounded-lg shadow-lg p-6">
+    <div class="card bg-gray-900 rounded-lg shadow-lg p-6 border border-gray-800">
         <div class="flex items-center justify-between">
             <div>
                 <p class="text-gray-400 text-sm">Active Queues</p>
@@ -39,7 +39,7 @@
     </div>
 
     <!-- Uptime -->
-    <div class="card bg-gray-800 rounded-lg shadow-lg p-6">
+    <div class="card bg-gray-900 rounded-lg shadow-lg p-6 border border-gray-800">
         <div class="flex items-center justify-between">
             <div>
                 <p class="text-gray-400 text-sm">Uptime</p>
@@ -51,7 +51,7 @@
 </div>
 
 <!-- AI Status Card -->
-<div class="bg-gray-800 rounded-lg shadow-lg p-6 mb-8">
+<div class="bg-gray-900 rounded-lg shadow-lg p-6 mb-8 border border-gray-800">
     <div class="flex items-center justify-between mb-4">
         <h2 class="text-xl font-bold flex items-center">
             <i class="fas fa-brain text-purple-500 mr-2"></i>
@@ -62,15 +62,15 @@
         </button>
     </div>
     <div id="ai-status" class="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div class="bg-gray-700 rounded p-4">
+        <div class="bg-gray-800 rounded p-4 border border-gray-700">
             <p class="text-gray-400 text-sm">Status</p>
             <p id="ai-enabled" class="text-lg font-semibold">Loading...</p>
         </div>
-        <div class="bg-gray-700 rounded p-4">
+        <div class="bg-gray-800 rounded p-4 border border-gray-700">
             <p class="text-gray-400 text-sm">Provider</p>
             <p id="ai-provider" class="text-lg font-semibold">--</p>
         </div>
-        <div class="bg-gray-700 rounded p-4">
+        <div class="bg-gray-800 rounded p-4 border border-gray-700">
             <p class="text-gray-400 text-sm">Model</p>
             <p id="ai-model" class="text-lg font-semibold">--</p>
         </div>
@@ -78,7 +78,7 @@
 </div>
 
 <!-- Guilds List -->
-<div class="bg-gray-800 rounded-lg shadow-lg p-6 mb-8">
+<div class="bg-gray-900 rounded-lg shadow-lg p-6 mb-8 border border-gray-800">
     <h2 class="text-xl font-bold mb-4 flex items-center">
         <i class="fas fa-server text-blue-500 mr-2"></i>
         Connected Servers
@@ -89,7 +89,7 @@
 </div>
 
 <!-- Active Queues Section -->
-<div class="bg-gray-800 rounded-lg shadow-lg p-6 mb-8">
+<div class="bg-gray-900 rounded-lg shadow-lg p-6 mb-8 border border-gray-800">
     <h2 class="text-xl font-bold mb-4 flex items-center">
         <i class="fas fa-music text-green-500 mr-2"></i>
         Active Music Queues
@@ -100,7 +100,7 @@
 </div>
 
 <!-- Quick Actions -->
-<div class="bg-gray-800 rounded-lg shadow-lg p-6">
+<div class="bg-gray-900 rounded-lg shadow-lg p-6 border border-gray-800">
     <h2 class="text-xl font-bold mb-4 flex items-center">
         <i class="fas fa-bolt text-yellow-500 mr-2"></i>
         Quick Actions
@@ -129,6 +129,7 @@
             updateStatusCards(data);
         } catch (error) {
             console.error('Error fetching status:', error);
+            showNotification('Failed to fetch bot status', 'danger');
         }
     }
 
@@ -137,7 +138,7 @@
         try {
             const response = await fetch('/api/guilds');
             const data = await response.json();
-            updateGuildsList(data.guilds);
+            updateGuildsList(data.guilds || []);
         } catch (error) {
             console.error('Error fetching guilds:', error);
         }
@@ -161,11 +162,17 @@
             const data = await response.json();
             
             document.getElementById('ai-enabled').textContent = data.available ? '✅ Online' : '❌ Offline';
-            document.getElementById('ai-provider').textContent = data.provider || '--';
-            document.getElementById('ai-model').textContent = data.model || '--';
+            document.getElementById('ai-provider').textContent = data.provider || 'Not configured';
+            document.getElementById('ai-model').textContent = data.model || 'Not configured';
+            
+            if (data.available) {
+                showNotification('AI service is operational', 'success');
+            }
         } catch (error) {
             console.error('Error fetching AI status:', error);
             document.getElementById('ai-enabled').textContent = '❌ Error';
+            document.getElementById('ai-provider').textContent = 'Error';
+            document.getElementById('ai-model').textContent = 'Error';
         }
     }
 
@@ -190,14 +197,14 @@
         }
         
         listEl.innerHTML = guilds.map(guild => `
-            <div class="bg-gray-700 rounded p-3 flex items-center justify-between hover:bg-gray-600 transition-colors">
+            <div class="bg-gray-800 rounded p-3 flex items-center justify-between hover:bg-gray-700 transition-colors border border-gray-700">
                 <div>
-                    <p class="font-semibold">${guild.name}</p>
+                    <p class="font-semibold">${escapeHtml(guild.name)}</p>
                     <p class="text-sm text-gray-400">${guild.member_count} members</p>
                 </div>
                 <div class="flex items-center space-x-2">
                     <span class="text-green-500"><i class="fas fa-circle text-xs"></i></span>
-                    <button onclick="viewGuildQueue(${guild.id})" class="text-purple-400 hover:text-purple-300">
+                    <button onclick="viewGuildQueue(${guild.id})" class="text-purple-400 hover:text-purple-300" title="View queue">
                         <i class="fas fa-music"></i>
                     </button>
                 </div>
@@ -215,11 +222,11 @@
         }
         
         container.innerHTML = queues.map(queue => `
-            <div class="bg-gray-700 rounded-lg p-4">
+            <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
                 <div class="flex items-center justify-between mb-3">
                     <div>
-                        <h3 class="font-semibold text-lg">${queue.guild_name}</h3>
-                        <p class="text-sm text-gray-400">${queue.voice_channel || 'Unknown channel'}</p>
+                        <h3 class="font-semibold text-lg">${escapeHtml(queue.guild_name)}</h3>
+                        <p class="text-sm text-gray-400">${escapeHtml(queue.voice_channel || 'Unknown channel')}</p>
                     </div>
                     <div class="flex items-center space-x-2">
                         ${queue.is_playing ? '<span class="badge badge-success">Playing</span>' : ''}
@@ -229,9 +236,9 @@
                 </div>
                 
                 ${queue.current_song ? `
-                    <div class="bg-gray-800 rounded p-3 mb-2">
+                    <div class="bg-gray-900 rounded p-3 mb-2 border border-gray-700">
                         <p class="text-sm text-gray-400 mb-1">Now Playing:</p>
-                        <p class="font-medium">${queue.current_song.title}</p>
+                        <p class="font-medium">${escapeHtml(queue.current_song.title)}</p>
                         ${queue.current_song.is_local ? '<span class="badge badge-info mt-1">Local File</span>' : ''}
                     </div>
                 ` : '<p class="text-gray-400 text-sm">No song playing</p>'}
@@ -249,17 +256,17 @@
                 
                 <div class="flex space-x-2 mt-3">
                     ${queue.is_playing ? 
-                        `<button onclick="controlQueue(${queue.guild_id}, 'pause')" class="btn-secondary text-sm py-1 px-3">
+                        `<button onclick="controlQueue(${queue.guild_id}, 'pause')" class="btn-secondary text-sm py-1 px-3" title="Pause">
                             <i class="fas fa-pause"></i>
                         </button>` :
-                        `<button onclick="controlQueue(${queue.guild_id}, 'resume')" class="btn-success text-sm py-1 px-3">
+                        `<button onclick="controlQueue(${queue.guild_id}, 'resume')" class="btn-success text-sm py-1 px-3" title="Resume">
                             <i class="fas fa-play"></i>
                         </button>`
                     }
-                    <button onclick="controlQueue(${queue.guild_id}, 'skip')" class="btn-secondary text-sm py-1 px-3">
+                    <button onclick="controlQueue(${queue.guild_id}, 'skip')" class="btn-secondary text-sm py-1 px-3" title="Skip">
                         <i class="fas fa-forward"></i>
                     </button>
-                    <button onclick="controlQueue(${queue.guild_id}, 'stop')" class="btn-danger text-sm py-1 px-3">
+                    <button onclick="controlQueue(${queue.guild_id}, 'stop')" class="btn-danger text-sm py-1 px-3" title="Stop">
                         <i class="fas fa-stop"></i>
                     </button>
                 </div>
@@ -271,13 +278,19 @@
     async function viewGuildQueue(guildId) {
         try {
             const response = await fetch(`/api/queue/${guildId}`);
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
             const queue = await response.json();
             
-            // Show modal or navigate to queue page
-            alert(`Queue for guild ${guildId}:\n${JSON.stringify(queue, null, 2)}`);
+            // Create a modal or detailed view
+            showNotification(`Queue loaded for guild ${guildId}`, 'success');
+            console.log('Guild queue:', queue);
+            
+            // TODO: Show in a proper modal instead of alert
         } catch (error) {
             console.error('Error fetching guild queue:', error);
-            showNotification('Failed to load queue', 'danger');
+            showNotification('Failed to load queue details', 'danger');
         }
     }
 
@@ -290,10 +303,14 @@
                 body: JSON.stringify({ command })
             });
             
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            
             const result = await response.json();
             
             if (result.success) {
-                showNotification(result.message, 'success');
+                showNotification(result.message || `Command ${command} executed`, 'success');
                 // Refresh queues after command
                 setTimeout(fetchActiveQueues, 500);
             } else {
@@ -303,6 +320,13 @@
             console.error('Error controlling queue:', error);
             showNotification('Failed to execute command', 'danger');
         }
+    }
+
+    // Escape HTML to prevent XSS
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
 
     // WebSocket message handler
@@ -341,6 +365,21 @@
             case 'command_executed':
                 showNotification(`Command executed: ${data.data.command}`, 'success');
                 fetchActiveQueues();
+                break;
+                
+            case 'initial_state':
+                // Handle initial state from WebSocket
+                if (data.data) {
+                    updateStatusCards({
+                        connected: data.data.connected,
+                        guilds: data.data.guilds?.length || 0,
+                        active_queues: Object.keys(data.data.queues || {}).length,
+                        uptime: data.data.uptime
+                    });
+                    if (data.data.guilds) {
+                        updateGuildsList(data.data.guilds);
+                    }
+                }
                 break;
         }
     }
