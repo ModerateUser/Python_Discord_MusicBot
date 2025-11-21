@@ -8,6 +8,7 @@ FIXES APPLIED:
 - FIX GUI #3: Add proper error handling for all endpoints
 - FIX GUI #4: Add bot integration support
 - FIX GUI #5: Fix LLM service initialization
+- FIX WEBUI #1: Fix config import to handle missing/malformed config gracefully
 """
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
@@ -26,12 +27,85 @@ import os
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+# FIX WEBUI #1: Import config safely without triggering validation
+config = None
+config_error = None
+
 try:
-    from core.config import config
+    # Import Config class but don't instantiate yet
+    from core.config import Config, ConfigurationError
+    
+    # Try to load config without validation (for WebUI display purposes)
+    try:
+        config = Config(validate=False)
+        # Try to load the config file
+        config.load()
+    except ConfigurationError as e:
+        config_error = str(e)
+        logging.warning(f"Config validation failed (WebUI will run in limited mode): {e}")
+        # Create a minimal config for WebUI to function
+        config = type('MinimalConfig', (), {
+            'command_prefix': '!',
+            'playing': '!help for commands',
+            'max_queue_size': 100,
+            'max_playlist_size': 500,
+            'allowed_file_extensions': ['.mp3', '.wav', '.flac', '.ogg'],
+            'music_directory': None,
+            'token': None,
+            'owner_id': None,
+            'llm': {'enabled': False},
+            'music_synthesis': {'enabled': False}
+        })()
+    except FileNotFoundError:
+        config_error = "Config file not found. Please create config.json"
+        logging.warning("Config file not found - WebUI running in limited mode")
+        # Create a minimal config
+        config = type('MinimalConfig', (), {
+            'command_prefix': '!',
+            'playing': '!help for commands',
+            'max_queue_size': 100,
+            'max_playlist_size': 500,
+            'allowed_file_extensions': ['.mp3', '.wav', '.flac', '.ogg'],
+            'music_directory': None,
+            'token': None,
+            'owner_id': None,
+            'llm': {'enabled': False},
+            'music_synthesis': {'enabled': False}
+        })()
+    except Exception as e:
+        config_error = f"Unexpected config error: {e}"
+        logging.error(f"Unexpected error loading config: {e}", exc_info=True)
+        # Create a minimal config
+        config = type('MinimalConfig', (), {
+            'command_prefix': '!',
+            'playing': '!help for commands',
+            'max_queue_size': 100,
+            'max_playlist_size': 500,
+            'allowed_file_extensions': ['.mp3', '.wav', '.flac', '.ogg'],
+            'music_directory': None,
+            'token': None,
+            'owner_id': None,
+            'llm': {'enabled': False},
+            'music_synthesis': {'enabled': False}
+        })()
+        
 except ImportError as e:
-    print(f"ERROR: Could not import config: {e}")
+    config_error = f"Could not import config module: {e}"
+    print(f"ERROR: {config_error}")
     print("Make sure you're running from the project root directory")
-    sys.exit(1)
+    # Create a minimal config to allow WebUI to start
+    config = type('MinimalConfig', (), {
+        'command_prefix': '!',
+        'playing': '!help for commands',
+        'max_queue_size': 100,
+        'max_playlist_size': 500,
+        'allowed_file_extensions': ['.mp3', '.wav', '.flac', '.ogg'],
+        'music_directory': None,
+        'token': None,
+        'owner_id': None,
+        'llm': {'enabled': False},
+        'music_synthesis': {'enabled': False}
+    })()
 
 logger = logging.getLogger('discord_bot')
 
@@ -54,8 +128,7 @@ app.add_middleware(
 # Templates directory
 templates_dir = Path(__file__).parent / "templates"
 if not templates_dir.exists():
-    print(f"ERROR: Templates directory not found: {templates_dir}")
-    print("Creating templates directory...")
+    print(f"Creating templates directory: {templates_dir}")
     templates_dir.mkdir(parents=True, exist_ok=True)
 
 templates = Jinja2Templates(directory=str(templates_dir))
@@ -115,6 +188,14 @@ body {
     font-weight: bold;
 }
 
+.error {
+    background: #fee;
+    border: 1px solid #fcc;
+    padding: 10px;
+    border-radius: 5px;
+    color: #c00;
+}
+
 button {
     background: #667eea;
     color: white;
@@ -139,7 +220,8 @@ bot_state = {
     "status": "offline",
     "uptime": None,
     "start_time": None,
-    "version": "1.0.0"
+    "version": "1.0.0",
+    "config_error": config_error  # FIX WEBUI #1: Track config errors
 }
 
 # WebSocket connections for real-time updates
@@ -188,23 +270,86 @@ async def dashboard(request: Request):
             "request": request,
             "bot_name": "Discord Music Bot",
             "version": bot_state.get("version", "1.0.0"),
-            "status": bot_state.get("status", "offline")
+            "status": bot_state.get("status", "offline"),
+            "config_error": config_error  # FIX WEBUI #1: Pass config error to template
         })
     except Exception as e:
         logger.error(f"Error rendering dashboard: {e}")
         return HTMLResponse(
             content=f"""
+            <!DOCTYPE html>
             <html>
-                <head><title>Dashboard Error</title></head>
+                <head>
+                    <title>Discord Music Bot Dashboard</title>
+                    <style>
+                        body {{
+                            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                            margin: 0;
+                            padding: 20px;
+                            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                        }}
+                        .container {{
+                            max-width: 800px;
+                            margin: 0 auto;
+                            background: white;
+                            padding: 30px;
+                            border-radius: 10px;
+                            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+                        }}
+                        .error {{
+                            background: #fee;
+                            border: 1px solid #fcc;
+                            padding: 15px;
+                            border-radius: 5px;
+                            color: #c00;
+                            margin: 20px 0;
+                        }}
+                        .info {{
+                            background: #eff;
+                            border: 1px solid #cef;
+                            padding: 15px;
+                            border-radius: 5px;
+                            color: #06c;
+                            margin: 20px 0;
+                        }}
+                        h1 {{ color: #667eea; }}
+                        a {{ color: #667eea; text-decoration: none; }}
+                        a:hover {{ text-decoration: underline; }}
+                    </style>
+                </head>
                 <body>
-                    <h1>Dashboard Error</h1>
-                    <p>Could not load dashboard template: {str(e)}</p>
-                    <p>Please ensure templates/dashboard.html exists</p>
-                    <a href="/api/status">View API Status</a>
+                    <div class="container">
+                        <h1>🎵 Discord Music Bot Dashboard</h1>
+                        
+                        {'<div class="error"><strong>⚠️ Configuration Error:</strong><br>' + config_error + '</div>' if config_error else ''}
+                        
+                        <div class="info">
+                            <strong>Dashboard Status:</strong> Online<br>
+                            <strong>Bot Status:</strong> {bot_state.get("status", "offline")}<br>
+                            <strong>Version:</strong> {bot_state.get("version", "1.0.0")}
+                        </div>
+                        
+                        <h2>Quick Links</h2>
+                        <ul>
+                            <li><a href="/api/status">API Status</a></li>
+                            <li><a href="/api/config">Configuration</a></li>
+                            <li><a href="/health">Health Check</a></li>
+                            <li><a href="/docs">API Documentation</a></li>
+                        </ul>
+                        
+                        <h2>Setup Instructions</h2>
+                        <ol>
+                            <li>Create a <code>config.json</code> file in the project root</li>
+                            <li>Add your Discord bot token and owner ID</li>
+                            <li>Restart the bot</li>
+                        </ol>
+                        
+                        <p><a href="/api/config">View current configuration →</a></p>
+                    </div>
                 </body>
             </html>
             """,
-            status_code=500
+            status_code=200
         )
 
 
@@ -214,19 +359,42 @@ async def config_page(request: Request):
     try:
         return templates.TemplateResponse("config.html", {
             "request": request,
-            "bot_name": "Discord Music Bot"
+            "bot_name": "Discord Music Bot",
+            "config_error": config_error
         })
     except Exception as e:
         logger.error(f"Error rendering config page: {e}")
-        # FIX GUI #3: Provide fallback HTML
         return HTMLResponse(
             content=f"""
+            <!DOCTYPE html>
             <html>
-                <head><title>Configuration</title></head>
+                <head>
+                    <title>Configuration - Discord Music Bot</title>
+                    <style>
+                        body {{
+                            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                            margin: 0;
+                            padding: 20px;
+                            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                        }}
+                        .container {{
+                            max-width: 800px;
+                            margin: 0 auto;
+                            background: white;
+                            padding: 30px;
+                            border-radius: 10px;
+                            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+                        }}
+                        h1 {{ color: #667eea; }}
+                        a {{ color: #667eea; }}
+                    </style>
+                </head>
                 <body>
-                    <h1>Configuration</h1>
-                    <p>Template not found. Use <a href="/api/config">API endpoint</a> instead.</p>
-                    <a href="/">Back to Dashboard</a>
+                    <div class="container">
+                        <h1>Configuration</h1>
+                        <p>Use the <a href="/api/config">API endpoint</a> to view configuration.</p>
+                        <p><a href="/">← Back to Dashboard</a></p>
+                    </div>
                 </body>
             </html>
             """,
@@ -244,15 +412,15 @@ async def logs_page(request: Request):
         })
     except Exception as e:
         logger.error(f"Error rendering logs page: {e}")
-        # FIX GUI #3: Provide fallback HTML
         return HTMLResponse(
             content=f"""
+            <!DOCTYPE html>
             <html>
-                <head><title>Logs</title></head>
+                <head><title>Logs - Discord Music Bot</title></head>
                 <body>
                     <h1>Logs</h1>
-                    <p>Template not found. Use <a href="/api/logs">API endpoint</a> instead.</p>
-                    <a href="/">Back to Dashboard</a>
+                    <p>Use the <a href="/api/logs">API endpoint</a> to view logs.</p>
+                    <p><a href="/">← Back to Dashboard</a></p>
                 </body>
             </html>
             """,
@@ -278,7 +446,8 @@ async def get_status():
             "active_queues": len(bot_state.get("queues", {})),
             "uptime": uptime_str,
             "timestamp": datetime.now().isoformat(),
-            "version": bot_state.get("version", "1.0.0")
+            "version": bot_state.get("version", "1.0.0"),
+            "config_error": config_error  # FIX WEBUI #1: Include config error in status
         })
     except Exception as e:
         logger.error(f"Error getting status: {e}", exc_info=True)
@@ -318,6 +487,13 @@ async def get_queue(guild_id: int):
 async def get_config():
     """Get current configuration (sanitized)"""
     try:
+        # FIX WEBUI #1: Handle config safely
+        if config is None:
+            return JSONResponse({
+                "error": "Configuration not loaded",
+                "config_error": config_error
+            })
+        
         # FIX GUI #2: Handle config attributes safely
         config_data = {
             "command_prefix": getattr(config, 'command_prefix', '!'),
@@ -327,24 +503,25 @@ async def get_config():
             "allowed_file_extensions": getattr(config, 'allowed_file_extensions', []),
             "music_directory": getattr(config, 'music_directory', None),
             "token_set": bool(getattr(config, 'token', None)),
-            "owner_id_set": bool(getattr(config, 'owner_id', None))
+            "owner_id_set": bool(getattr(config, 'owner_id', None)),
+            "config_error": config_error  # FIX WEBUI #1: Include error info
         }
         
         # Add LLM config if available
         llm_config = getattr(config, 'llm', None)
         if llm_config:
             config_data["llm"] = {
-                "enabled": llm_config.get('enabled', False),
-                "provider": llm_config.get('provider', 'none'),
-                "model": llm_config.get('model', 'none')
+                "enabled": llm_config.get('enabled', False) if isinstance(llm_config, dict) else False,
+                "provider": llm_config.get('provider', 'none') if isinstance(llm_config, dict) else 'none',
+                "model": llm_config.get('model', 'none') if isinstance(llm_config, dict) else 'none'
             }
         
         # Add music synthesis config if available
         synthesis_config = getattr(config, 'music_synthesis', None)
         if synthesis_config:
             config_data["music_synthesis"] = {
-                "enabled": synthesis_config.get('enabled', False),
-                "backend": synthesis_config.get('backend', 'disabled')
+                "enabled": synthesis_config.get('enabled', False) if isinstance(synthesis_config, dict) else False,
+                "backend": synthesis_config.get('backend', 'disabled') if isinstance(synthesis_config, dict) else 'disabled'
             }
         
         return JSONResponse(config_data)
@@ -357,12 +534,10 @@ async def get_config():
 async def update_config(config_data: dict):
     """Update configuration"""
     try:
-        # FIX GUI #3: Add validation
         if not config_data:
             raise HTTPException(status_code=400, detail="No configuration data provided")
         
         # TODO: Implement config update logic
-        # This would need to write to config.json and reload
         return JSONResponse({
             "success": False,
             "message": "Configuration update not yet implemented (requires bot restart)"
@@ -378,7 +553,6 @@ async def update_config(config_data: dict):
 async def get_llm_status():
     """Get LLM service status"""
     try:
-        # FIX GUI #5: Handle LLM service safely
         llm_config = getattr(config, 'llm', None)
         if not llm_config:
             return JSONResponse({
@@ -388,11 +562,8 @@ async def get_llm_status():
                 "message": "LLM not configured"
             })
         
-        # Try to import and check LLM service
         try:
             from services.llm_service import LLMService
-            
-            # Create LLM service instance
             llm = LLMService(llm_config)
             is_available = await llm.is_available()
             
@@ -402,21 +573,12 @@ async def get_llm_status():
                 "model": llm.model,
                 "available": is_available
             })
-        except ImportError as e:
-            logger.warning(f"LLM service not available: {e}")
+        except ImportError:
             return JSONResponse({
                 "enabled": False,
                 "provider": "error",
                 "available": False,
                 "error": "LLM service module not found"
-            })
-        except Exception as e:
-            logger.error(f"Error checking LLM status: {e}", exc_info=True)
-            return JSONResponse({
-                "enabled": False,
-                "provider": "error",
-                "available": False,
-                "error": str(e)
             })
     except Exception as e:
         logger.error(f"Error in LLM status endpoint: {e}", exc_info=True)
@@ -427,7 +589,6 @@ async def get_llm_status():
 async def get_logs(lines: int = 100):
     """Get recent log entries"""
     try:
-        # FIX GUI #3: Validate input
         if lines < 1 or lines > 10000:
             raise HTTPException(status_code=400, detail="Lines must be between 1 and 10000")
         
@@ -460,7 +621,6 @@ async def websocket_endpoint(websocket: WebSocket):
     """WebSocket endpoint for real-time updates"""
     await manager.connect(websocket)
     try:
-        # Send initial state
         await websocket.send_json({
             "type": "initial_state",
             "data": bot_state,
@@ -468,10 +628,8 @@ async def websocket_endpoint(websocket: WebSocket):
         })
         
         while True:
-            # Keep connection alive and receive messages
             data = await websocket.receive_text()
             
-            # Parse command
             try:
                 command = json.loads(data)
                 command_type = command.get("type")
@@ -494,7 +652,6 @@ async def websocket_endpoint(websocket: WebSocket):
                         "timestamp": datetime.now().isoformat()
                     })
             except json.JSONDecodeError:
-                # Echo back for non-JSON messages
                 await websocket.send_json({
                     "type": "echo",
                     "data": data,
@@ -510,7 +667,6 @@ async def websocket_endpoint(websocket: WebSocket):
 @app.post("/api/bot/start")
 async def start_bot():
     """Start the bot (if not running)"""
-    # FIX GUI #4: This would need integration with the bot process
     return JSONResponse({
         "success": False,
         "message": "Bot control requires integration with bot process (not yet implemented)"
@@ -520,7 +676,6 @@ async def start_bot():
 @app.post("/api/bot/stop")
 async def stop_bot():
     """Stop the bot"""
-    # FIX GUI #4: This would need integration with the bot process
     return JSONResponse({
         "success": False,
         "message": "Bot control requires integration with bot process (not yet implemented)"
@@ -530,14 +685,12 @@ async def stop_bot():
 @app.post("/api/bot/restart")
 async def restart_bot():
     """Restart the bot"""
-    # FIX GUI #4: This would need integration with bot process
     return JSONResponse({
         "success": False,
         "message": "Bot control requires integration with bot process (not yet implemented)"
     })
 
 
-# FIX GUI #4: Helper function to update bot state (called from bot)
 async def update_bot_state(new_state: Dict[str, Any]):
     """Update bot state and broadcast to connected clients"""
     try:
@@ -551,18 +704,18 @@ async def update_bot_state(new_state: Dict[str, Any]):
         logger.error(f"Error updating bot state: {e}", exc_info=True)
 
 
-# Health check
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
     return JSONResponse({
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
-        "bot_connected": bot_state.get("connected", False)
+        "bot_connected": bot_state.get("connected", False),
+        "config_loaded": config is not None,
+        "config_error": config_error
     })
 
 
-# Startup event
 @app.on_event("startup")
 async def startup_event():
     """Run on application startup"""
@@ -570,18 +723,18 @@ async def startup_event():
     logger.info(f"Templates directory: {templates_dir}")
     logger.info(f"Static directory: {static_dir}")
     
-    # Set initial state
+    if config_error:
+        logger.warning(f"Dashboard started with config error: {config_error}")
+    
     bot_state["start_time"] = datetime.now()
     bot_state["status"] = "dashboard_online"
 
 
-# Shutdown event
 @app.on_event("shutdown")
 async def shutdown_event():
     """Run on application shutdown"""
     logger.info("Web Dashboard shutting down...")
     
-    # Disconnect all WebSocket clients
     for connection in manager.active_connections[:]:
         try:
             await connection.close()
@@ -600,10 +753,14 @@ if __name__ == "__main__":
     print(f"API Docs: http://localhost:8000/docs")
     print(f"Health Check: http://localhost:8000/health")
     print("=" * 70)
-    print()
-    print("Note: The dashboard runs independently of the bot.")
-    print("To integrate with the bot, run both bot.py and this dashboard.")
-    print()
+    
+    if config_error:
+        print()
+        print("⚠️  WARNING: Configuration Error Detected")
+        print(f"   {config_error}")
+        print("   Dashboard will run in limited mode.")
+        print()
+    
     print("=" * 70)
     
     try:
