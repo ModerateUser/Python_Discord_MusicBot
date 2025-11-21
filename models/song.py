@@ -21,6 +21,7 @@ class MusicQueue:
         self.songs: List[Song] = []
         self.current: Optional[Song] = None
         self.loop: bool = False
+        self.volume: float = 0.5  # Default volume (50%)
     
     def add(self, song: Song) -> None:
         """Add a song to the queue"""
