@@ -157,6 +157,7 @@ class Music(commands.Cog):
                         await ctx.send('❌ Could not find that track')
                         return
                     
+                    # Store the webpage URL for re-fetching if needed
                     song = Song(player, player.title, is_local=False)
                     queue.add(song)
                     
@@ -169,8 +170,14 @@ class Music(commands.Cog):
                     logger.error(f"Play error: {e}", exc_info=True)
                     await ctx.send('❌ Error: Could not play that track')
     
-    async def _play_next(self, ctx: commands.Context):
-        """Play the next song in queue (thread-safe)"""
+    async def _play_next(self, ctx: commands.Context, retry_count: int = 0):
+        """
+        Play the next song in queue (thread-safe with retry logic)
+        
+        Args:
+            ctx: Command context
+            retry_count: Number of retries attempted (for URL expiration handling)
+        """
         guild_id = ctx.guild.id
         lock = self.get_play_lock(guild_id)
         
@@ -203,17 +210,37 @@ class Music(commands.Cog):
                 try:
                     if song.is_local:
                         source = audio_service.create_local_source(song.source)
+                        if not source:
+                            await ctx.send(f'❌ Error loading local file: **{song.title}**')
+                            await self._play_next(ctx)
+                            return
                     else:
-                        # For loop mode, we need to re-fetch the URL
+                        # For streamed songs, check if we need to re-fetch the URL
+                        # This handles URL expiration (URLs expire after ~5 minutes)
                         if queue.loop and hasattr(song.source, 'data'):
-                            url = song.source.data.get('webpage_url') or song.source.data.get('url')
-                            if url:
-                                # Re-create source for loop (prevents stale stream issues)
-                                song.source = await audio_service.create_ytdl_source(
-                                    url, 
+                            # Re-fetch URL for loop mode to prevent expiration
+                            webpage_url = song.source.data.get('webpage_url')
+                            if webpage_url:
+                                logger.debug(f"Re-fetching stream URL for loop: {song.title}")
+                                new_source = await audio_service.create_ytdl_source(
+                                    webpage_url, 
                                     loop=self.bot.loop, 
                                     stream=True
                                 )
+                                if new_source:
+                                    song.source = new_source
+                                else:
+                                    logger.error(f"Failed to re-fetch URL for {song.title}")
+                                    if retry_count < 2:
+                                        # Retry once
+                                        await asyncio.sleep(1)
+                                        await self._play_next(ctx, retry_count + 1)
+                                        return
+                                    else:
+                                        await ctx.send(f'❌ Stream expired for: **{song.title}**')
+                                        await self._play_next(ctx)
+                                        return
+                        
                         source = song.source
                     
                     # Apply volume if set
@@ -229,6 +256,12 @@ class Music(commands.Cog):
                         # Channel might be deleted, log but don't crash
                         logger.warning(f"Could not send now playing message in guild {guild_id}")
                         
+                except discord.ClientException as e:
+                    logger.error(f"Discord client error for {song.title}: {e}", exc_info=True)
+                    await ctx.send(f'❌ Playback error: **{song.title}**')
+                    # Try to play next song
+                    await self._play_next(ctx)
+                    
                 except Exception as e:
                     logger.error(f"Playback error for {song.title}: {e}", exc_info=True)
                     try:
