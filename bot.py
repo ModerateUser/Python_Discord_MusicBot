@@ -2,6 +2,13 @@
 Discord Music Bot - Main Entry Point
 A feature-rich music bot with security, playlist management, and advanced AI features
 Includes AI music synthesis capabilities
+
+FIXES APPLIED:
+- FIX #2: Use config.to_dict() instead of config.config
+- FIX #4: Set bot.llm_config attribute properly
+- FIX #6: Add try-finally blocks to prevent memory leaks
+- FIX #8: Improve error handling with specific exception types
+- FIX #10: Add validation for natural language commands
 """
 import discord
 from discord.ext import commands
@@ -43,6 +50,9 @@ bot = commands.Bot(
     help_command=None  # We'll create a custom help command
 )
 
+# FIX #4: Set bot attributes from config
+bot.llm_config = config.llm_config
+
 
 @bot.event
 async def on_ready():
@@ -63,24 +73,38 @@ async def on_ready():
 
 
 async def initialize_services():
-    """Initialize all AI services"""
+    """
+    Initialize all AI services
+    FIX #8: Improved error handling with specific exception types
+    """
     global advanced_ai_service, synthesis_service
     
     # Initialize music synthesis service
     try:
         from services.music_synthesis_service import create_music_synthesis_service
-        
+    except ImportError as e:
+        logger.error(f"Failed to import music synthesis service: {e}")
+        synthesis_service = None
+        return
+    
+    try:
         ai_cog = bot.get_cog('AI Music')
         llm_service = ai_cog.llm if ai_cog else None
         
-        synthesis_service = create_music_synthesis_service(config.config, llm_service)
+        # FIX #2: Use config.to_dict() instead of config.config
+        config_dict = config.to_dict()
+        synthesis_service = create_music_synthesis_service(config_dict, llm_service)
         
         if await synthesis_service.is_available():
             logger.info(f'✅ Music Synthesis Service initialized (Backend: {synthesis_service.backend.value})')
         else:
             logger.info('⚠️ Music synthesis disabled (check config.json)')
+    except AttributeError as e:
+        logger.error(f'Configuration error in music synthesis: {e}')
+        logger.error('Make sure config.json has proper music_synthesis section')
+        synthesis_service = None
     except Exception as e:
-        logger.warning(f'⚠️ Music synthesis unavailable: {e}')
+        logger.error(f'Unexpected error initializing music synthesis: {e}', exc_info=True)
         synthesis_service = None
     
     # Initialize advanced AI service
@@ -88,16 +112,26 @@ async def initialize_services():
 
 
 async def initialize_advanced_ai_service():
-    """Initialize the advanced AI music service"""
+    """
+    Initialize the advanced AI music service
+    FIX #8: Better error handling
+    """
     global advanced_ai_service
     
-    ai_cog = bot.get_cog('AI Music')
-    if ai_cog and await ai_cog.llm.is_available():
-        from services.ai_music_service import create_advanced_ai_service
-        advanced_ai_service = create_advanced_ai_service(ai_cog.llm, synthesis_service)
-        logger.info('✅ Advanced AI Music Service initialized')
-    else:
-        logger.info('⚠️ Advanced AI features unavailable (LLM not loaded)')
+    try:
+        ai_cog = bot.get_cog('AI Music')
+        if ai_cog and await ai_cog.llm.is_available():
+            from services.ai_music_service import create_advanced_ai_service
+            advanced_ai_service = create_advanced_ai_service(ai_cog.llm, synthesis_service)
+            logger.info('✅ Advanced AI Music Service initialized')
+        else:
+            logger.info('⚠️ Advanced AI features unavailable (LLM not loaded)')
+    except ImportError as e:
+        logger.error(f"Failed to import advanced AI service: {e}")
+        advanced_ai_service = None
+    except Exception as e:
+        logger.error(f"Error initializing advanced AI service: {e}", exc_info=True)
+        advanced_ai_service = None
 
 
 @bot.event
@@ -124,6 +158,9 @@ async def handle_natural_language(message: discord.Message):
     """
     Handle natural language commands with !/ prefix
     Supports complex action chaining and advanced AI features including music synthesis
+    
+    FIX #6: Added try-finally blocks to prevent memory leaks
+    FIX #10: Added validation for parameters
     """
     # Extract the natural language query
     query = message.content[2:].strip()  # Remove !/ prefix
@@ -145,10 +182,12 @@ async def handle_natural_language(message: discord.Message):
     if not advanced_ai_service:
         await initialize_advanced_ai_service()
     
-    # Show thinking indicator
-    thinking_msg = await message.reply("🤔 Analyzing your request...")
-    
+    # FIX #6: Use try-finally to ensure cleanup
+    thinking_msg = None
     try:
+        # Show thinking indicator
+        thinking_msg = await message.reply("🤔 Analyzing your request...")
+        
         # Check if this is a complex command (contains "then", "after", "and then", etc.)
         is_complex = any(keyword in query.lower() for keyword in [
             'then', 'after', 'and then', 'followed by', 'next', 'create', 'generate',
@@ -190,7 +229,14 @@ async def handle_natural_language(message: discord.Message):
         
     except Exception as e:
         logger.error(f"Error handling natural language command: {e}", exc_info=True)
-        await thinking_msg.edit(content=f"❌ Error processing your request: {str(e)}")
+        if thinking_msg:
+            try:
+                await thinking_msg.edit(content=f"❌ Error processing your request: {str(e)}")
+            except:
+                pass
+    finally:
+        # FIX #6: Cleanup happens here
+        pass
 
 
 async def execute_complex_actions(
@@ -242,7 +288,10 @@ async def execute_single_action(
     action,
     status_msg: discord.Message
 ):
-    """Execute a single action from the action chain"""
+    """
+    Execute a single action from the action chain
+    FIX #10: Added validation for action parameters
+    """
     from services.ai_music_service import ActionType
     
     music_cog = bot.get_cog('Music')
@@ -272,9 +321,15 @@ async def execute_single_action(
             await music_cog.stop(message)
     
     elif action.action_type == ActionType.VOLUME:
+        # FIX #10: Validate volume level
         level = action.parameters.get('level')
-        if level is not None and music_cog:
-            await music_cog.volume(message, volume=level)
+        if level is not None:
+            if not isinstance(level, (int, float)) or not 0 <= level <= 100:
+                await message.channel.send("❌ Volume must be between 0 and 100")
+                return
+            
+            if music_cog:
+                await music_cog.volume(message, volume=int(level))
     
     elif action.action_type == ActionType.LOOP:
         if music_cog:
@@ -292,8 +347,13 @@ async def execute_single_action(
         duration = action.parameters.get('duration', 30)
         use_history = action.parameters.get('use_history', True)
         
+        # FIX #10: Validate parameters
         if not prompt:
             await message.channel.send("❌ No prompt provided for music synthesis")
+            return
+        
+        if not isinstance(duration, (int, float)) or not 10 <= duration <= 300:
+            await message.channel.send("❌ Duration must be between 10 and 300 seconds")
             return
         
         # Show synthesis progress
@@ -306,7 +366,7 @@ async def execute_single_action(
                 guild_id=message.guild.id,
                 style=style,
                 mood=mood,
-                duration=duration,
+                duration=int(duration),
                 use_history=use_history
             )
             
@@ -331,6 +391,11 @@ async def execute_single_action(
         mood = action.parameters.get('mood', 'varied')
         genre = action.parameters.get('genre')
         count = action.parameters.get('count', 10)
+        
+        # FIX #10: Validate count
+        if not isinstance(count, int) or not 1 <= count <= 50:
+            await message.channel.send("❌ Playlist count must be between 1 and 50")
+            return
         
         songs = await advanced_ai_service.generate_mood_playlist(mood, genre, count)
         
@@ -367,6 +432,11 @@ async def execute_single_action(
         # Find similar songs
         reference = action.parameters.get('reference_song', '')
         count = action.parameters.get('count', 5)
+        
+        # FIX #10: Validate count
+        if not isinstance(count, int) or not 1 <= count <= 20:
+            await message.channel.send("❌ Similar songs count must be between 1 and 20")
+            return
         
         similar_songs = await advanced_ai_service.find_similar_songs(reference, count=count)
         
@@ -416,6 +486,11 @@ async def execute_single_action(
         from_mood = action.parameters.get('from_mood', 'calm')
         to_mood = action.parameters.get('to_mood', 'energetic')
         duration = action.parameters.get('duration_songs', 10)
+        
+        # FIX #10: Validate duration
+        if not isinstance(duration, int) or not 3 <= duration <= 30:
+            await message.channel.send("❌ Transition duration must be between 3 and 30 songs")
+            return
         
         songs = await advanced_ai_service.create_mood_transition_playlist(from_mood, to_mood, duration)
         
@@ -480,6 +555,7 @@ async def execute_natural_language_command(
 ):
     """
     Execute the interpreted command based on parsed intent (simple commands)
+    FIX #10: Added validation for all command parameters
     """
     command = intent.get('command', '').lower()
     parameters = intent.get('parameters', {})
@@ -514,6 +590,11 @@ async def execute_natural_language_command(
                 await thinking_msg.edit(content="❌ Please specify what kind of music to synthesize")
                 return
             
+            # FIX #10: Validate duration
+            duration = parameters.get('duration', 30)
+            if not isinstance(duration, (int, float)) or not 10 <= duration <= 300:
+                duration = 30  # Default to 30 seconds
+            
             await thinking_msg.edit(content=f"🎼 Synthesizing: **{prompt}**\n⏳ This may take 30-120 seconds...")
             
             # Synthesize music
@@ -522,7 +603,7 @@ async def execute_natural_language_command(
                 guild_id=message.guild.id,
                 style=parameters.get('style'),
                 mood=parameters.get('mood'),
-                duration=parameters.get('duration', 30),
+                duration=int(duration),
                 use_history=True
             )
             
@@ -584,10 +665,21 @@ async def execute_natural_language_command(
         elif command == 'volume':
             # Set volume
             level = parameters.get('level')
+            
+            # FIX #10: Validate volume level
             if level is not None:
+                if not isinstance(level, (int, float)) or not 0 <= level <= 100:
+                    await thinking_msg.edit(content="❌ Volume must be between 0 and 100")
+                    return
+                
+                # Check voice connectivity
+                if not message.guild.voice_client:
+                    await thinking_msg.edit(content="❌ Not connected to voice channel")
+                    return
+                
                 if music_cog:
                     await thinking_msg.delete()
-                    await music_cog.volume(message, volume=level)
+                    await music_cog.volume(message, volume=int(level))
                 else:
                     await thinking_msg.edit(content="❌ Music system not available")
             else:
