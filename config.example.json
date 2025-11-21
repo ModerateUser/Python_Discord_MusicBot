@@ -16,6 +16,17 @@
         "timeout": 30,
         "max_tokens": 500
     },
+    "music_synthesis": {
+        "enabled": false,
+        "backend": "disabled",
+        "cache_dir": "generated_music",
+        "max_cache_size_mb": 1000,
+        "default_duration": 30,
+        "default_quality": "medium",
+        "suno_api_key": null,
+        "suno_api_url": "https://api.suno.ai/v1",
+        "musicgen_model": "facebook/musicgen-small"
+    },
     "web_dashboard": {
         "enabled": true,
         "host": "0.0.0.0",
