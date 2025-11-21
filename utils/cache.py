@@ -1,6 +1,8 @@
 """
 Caching utilities for Discord Music Bot
 Provides TTL-based caching for expensive operations
+
+FIX BUG #4: Changed 'name' to 'cache_name' in predefined cache configs
 """
 import time
 import logging
@@ -182,7 +184,7 @@ class CacheManager:
     
     async def get_cache(
         self, 
-        name: str, 
+        cache_name: str,  # FIX BUG #4: Changed parameter name from 'name' to 'cache_name' for consistency
         max_size: int = 1000, 
         ttl: float = 300
     ) -> TTLCache:
@@ -190,7 +192,7 @@ class CacheManager:
         Get or create a named cache
         
         Args:
-            name: Cache name
+            cache_name: Cache name
             max_size: Maximum cache size
             ttl: Time-to-live in seconds
             
@@ -198,25 +200,25 @@ class CacheManager:
             TTLCache instance
         """
         async with self._lock:
-            if name not in self._caches:
-                self._caches[name] = TTLCache(max_size=max_size, ttl=ttl)
-                logger.info(f"Created cache: {name} (max_size={max_size}, ttl={ttl}s)")
+            if cache_name not in self._caches:
+                self._caches[cache_name] = TTLCache(max_size=max_size, ttl=ttl)
+                logger.info(f"Created cache: {cache_name} (max_size={max_size}, ttl={ttl}s)")
             
-            return self._caches[name]
+            return self._caches[cache_name]
     
-    async def clear_cache(self, name: str) -> bool:
+    async def clear_cache(self, cache_name: str) -> bool:
         """
         Clear a specific cache
         
         Args:
-            name: Cache name
+            cache_name: Cache name
             
         Returns:
             True if cache was cleared
         """
         async with self._lock:
-            if name in self._caches:
-                await self._caches[name].clear()
+            if cache_name in self._caches:
+                await self._caches[cache_name].clear()
                 return True
             return False
     
@@ -343,27 +345,28 @@ def cached(
     return decorator
 
 
-# Predefined cache configurations for common use cases
+# FIX BUG #4: Changed 'name' to 'cache_name' in all predefined cache configurations
+# This matches the parameter name expected by the @cached() decorator
 YOUTUBE_CACHE_CONFIG = {
-    'name': 'youtube_metadata',
+    'cache_name': 'youtube_metadata',
     'ttl': 300,  # 5 minutes
     'max_size': 500
 }
 
 LLM_CACHE_CONFIG = {
-    'name': 'llm_responses',
+    'cache_name': 'llm_responses',
     'ttl': 600,  # 10 minutes
     'max_size': 200
 }
 
 SEARCH_CACHE_CONFIG = {
-    'name': 'search_results',
+    'cache_name': 'search_results',
     'ttl': 120,  # 2 minutes
     'max_size': 300
 }
 
 SYNTHESIS_CACHE_CONFIG = {
-    'name': 'synthesized_music',
+    'cache_name': 'synthesized_music',
     'ttl': 3600,  # 1 hour
     'max_size': 50
 }
