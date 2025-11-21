@@ -5,14 +5,20 @@
     "command_prefix": "!",
     "max_queue_size": 100,
     "max_playlist_size": 500,
-    "allowed_file_extensions": [
-        ".mp3",
-        ".wav",
-        ".flac",
-        ".ogg",
-        ".m4a",
-        ".aac",
-        ".opus"
-    ],
-    "music_directory": null
+    "allowed_file_extensions": [".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac", ".opus"],
+    "music_directory": null,
+    "llm": {
+        "enabled": false,
+        "provider": "ollama",
+        "model": "llama3",
+        "api_key": null,
+        "base_url": "http://localhost:11434",
+        "timeout": 30,
+        "max_tokens": 500
+    },
+    "web_dashboard": {
+        "enabled": true,
+        "host": "0.0.0.0",
+        "port": 8000
+    }
 }
