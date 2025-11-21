@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ bot_name }} - Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .status-online { color: #10b981; }
+        .status-offline { color: #ef4444; }
+        .card { transition: transform 0.2s; }
+        .card:hover { transform: translateY(-2px); }
+        .pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: .5; }
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100">
+    <!-- Navigation -->
+    <nav class="bg-gray-800 border-b border-gray-700">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center">
+                    <i class="fas fa-music text-purple-500 text-2xl mr-3"></i>
+                    <span class="text-xl font-bold">{{ bot_name }}</span>
+                </div>
+                <div class="flex space-x-4">
+                    <a href="/" class="px-3 py-2 rounded-md text-sm font-medium bg-gray-700 text-white">Dashboard</a>
+                    <a href="/config" class="px-3 py-2 rounded-md text-sm font-medium text-gray-300 hover:bg-gray-700 hover:text-white">Config</a>
+                    <a href="/logs" class="px-3 py-2 rounded-md text-sm font-medium text-gray-300 hover:bg-gray-700 hover:text-white">Logs</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <!-- Status Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            <!-- Bot Status -->
+            <div class="card bg-gray-800 rounded-lg shadow-lg p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-400 text-sm">Bot Status</p>
+                        <p id="bot-status" class="text-2xl font-bold status-offline">Offline</p>
+                    </div>
+                    <i class="fas fa-robot text-4xl text-purple-500"></i>
+                </div>
+            </div>
+
+            <!-- Guilds -->
+            <div class="card bg-gray-800 rounded-lg shadow-lg p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-400 text-sm">Servers</p>
+                        <p id="guild-count" class="text-2xl font-bold">0</p>
+                    </div>
+                    <i class="fas fa-server text-4xl text-blue-500"></i>
+                </div>
+            </div>
+
+            <!-- Active Queues -->
+            <div class="card bg-gray-800 rounded-lg shadow-lg p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-400 text-sm">Active Queues</p>
+                        <p id="queue-count" class="text-2xl font-bold">0</p>
+                    </div>
+                    <i class="fas fa-list text-4xl text-green-500"></i>
+                </div>
+            </div>
+
+            <!-- Uptime -->
+            <div class="card bg-gray-800 rounded-lg shadow-lg p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-400 text-sm">Uptime</p>
+                        <p id="uptime" class="text-2xl font-bold">--:--:--</p>
+                    </div>
+                    <i class="fas fa-clock text-4xl text-yellow-500"></i>
+                </div>
+            </div>
+        </div>
+
+        <!-- AI Status Card -->
+        <div class="bg-gray-800 rounded-lg shadow-lg p-6 mb-8">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-xl font-bold flex items-center">
+                    <i class="fas fa-brain text-purple-500 mr-2"></i>
+                    AI Service Status
+                </h2>
+                <button onclick="refreshAIStatus()" class="px-4 py-2 bg-purple-600 hover:bg-purple-700 rounded-md text-sm">
+                    <i class="fas fa-sync-alt mr-2"></i>Refresh
+                </button>
+            </div>
+            <div id="ai-status" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="bg-gray-700 rounded p-4">
+                    <p class="text-gray-400 text-sm">Status</p>
+                    <p id="ai-enabled" class="text-lg font-semibold">Loading...</p>
+                </div>
+                <div class="bg-gray-700 rounded p-4">
+                    <p class="text-gray-400 text-sm">Provider</p>
+                    <p id="ai-provider" class="text-lg font-semibold">--</p>
+                </div>
+                <div class="bg-gray-700 rounded p-4">
+                    <p class="text-gray-400 text-sm">Model</p>
+                    <p id="ai-model" class="text-lg font-semibold">--</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Guilds List -->
+        <div class="bg-gray-800 rounded-lg shadow-lg p-6 mb-8">
+            <h2 class="text-xl font-bold mb-4 flex items-center">
+                <i class="fas fa-server text-blue-500 mr-2"></i>
+                Connected Servers
+            </h2>
+            <div id="guilds-list" class="space-y-2">
+                <p class="text-gray-400">No servers connected</p>
+            </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="bg-gray-800 rounded-lg shadow-lg p-6">
+            <h2 class="text-xl font-bold mb-4 flex items-center">
+                <i class="fas fa-bolt text-yellow-500 mr-2"></i>
+                Quick Actions
+            </h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <button onclick="controlBot('restart')" class="px-6 py-3 bg-blue-600 hover:bg-blue-700 rounded-lg font-semibold">
+                    <i class="fas fa-redo mr-2"></i>Restart Bot
+                </button>
+                <button onclick="window.location.href='/config'" class="px-6 py-3 bg-purple-600 hover:bg-purple-700 rounded-lg font-semibold">
+                    <i class="fas fa-cog mr-2"></i>Configuration
+                </button>
+                <button onclick="window.location.href='/logs'" class="px-6 py-3 bg-green-600 hover:bg-green-700 rounded-lg font-semibold">
+                    <i class="fas fa-file-alt mr-2"></i>View Logs
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="bg-gray-800 border-t border-gray-700 mt-12">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            <div class="flex items-center justify-between">
+                <p class="text-gray-400 text-sm">{{ bot_name }} v{{ version }}</p>
+                <div class="flex items-center space-x-2">
+                    <span class="text-gray-400 text-sm">WebSocket:</span>
+                    <span id="ws-status" class="text-sm status-offline">Disconnected</span>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        let ws = null;
+        let reconnectInterval = null;
+
+        // Connect to WebSocket
+        function connectWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws`;
+            
+            ws = new WebSocket(wsUrl);
+            
+            ws.onopen = () => {
+                console.log('WebSocket connected');
+                document.getElementById('ws-status').textContent = 'Connected';
+                document.getElementById('ws-status').className = 'text-sm status-online';
+                if (reconnectInterval) {
+                    clearInterval(reconnectInterval);
+                    reconnectInterval = null;
+                }
+            };
+            
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (data.type === 'state_update') {
+                    updateDashboard(data.data);
+                }
+            };
+            
+            ws.onclose = () => {
+                console.log('WebSocket disconnected');
+                document.getElementById('ws-status').textContent = 'Disconnected';
+                document.getElementById('ws-status').className = 'text-sm status-offline';
+                
+                // Attempt to reconnect
+                if (!reconnectInterval) {
+                    reconnectInterval = setInterval(() => {
+                        console.log('Attempting to reconnect...');
+                        connectWebSocket();
+                    }, 5000);
+                }
+            };
+            
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+            };
+        }
+
+        // Fetch initial status
+        async function fetchStatus() {
+            try {
+                const response = await fetch('/api/status');
+                const data = await response.json();
+                updateStatusCards(data);
+            } catch (error) {
+                console.error('Error fetching status:', error);
+            }
+        }
+
+        // Fetch guilds
+        async function fetchGuilds() {
+            try {
+                const response = await fetch('/api/guilds');
+                const data = await response.json();
+                updateGuildsList(data.guilds);
+            } catch (error) {
+                console.error('Error fetching guilds:', error);
+            }
+        }
+
+        // Fetch AI status
+        async function refreshAIStatus() {
+            try {
+                const response = await fetch('/api/llm/status');
+                const data = await response.json();
+                
+                document.getElementById('ai-enabled').textContent = data.available ? '✅ Online' : '❌ Offline';
+                document.getElementById('ai-provider').textContent = data.provider || '--';
+                document.getElementById('ai-model').textContent = data.model || '--';
+            } catch (error) {
+                console.error('Error fetching AI status:', error);
+                document.getElementById('ai-enabled').textContent = '❌ Error';
+            }
+        }
+
+        // Update status cards
+        function updateStatusCards(data) {
+            const statusEl = document.getElementById('bot-status');
+            statusEl.textContent = data.connected ? 'Online' : 'Offline';
+            statusEl.className = data.connected ? 'text-2xl font-bold status-online' : 'text-2xl font-bold status-offline';
+            
+            document.getElementById('guild-count').textContent = data.guilds || 0;
+            document.getElementById('queue-count').textContent = data.active_queues || 0;
+            document.getElementById('uptime').textContent = data.uptime || '--:--:--';
+        }
+
+        // Update guilds list
+        function updateGuildsList(guilds) {
+            const listEl = document.getElementById('guilds-list');
+            
+            if (!guilds || guilds.length === 0) {
+                listEl.innerHTML = '<p class="text-gray-400">No servers connected</p>';
+                return;
+            }
+            
+            listEl.innerHTML = guilds.map(guild => `
+                <div class="bg-gray-700 rounded p-3 flex items-center justify-between">
+                    <div>
+                        <p class="font-semibold">${guild.name}</p>
+                        <p class="text-sm text-gray-400">${guild.member_count} members</p>
+                    </div>
+                    <span class="text-green-500"><i class="fas fa-circle text-xs"></i></span>
+                </div>
+            `).join('');
+        }
+
+        // Update dashboard from WebSocket
+        function updateDashboard(data) {
+            updateStatusCards({
+                connected: data.connected,
+                guilds: data.guilds.length,
+                active_queues: Object.keys(data.queues).length,
+                uptime: data.uptime
+            });
+            updateGuildsList(data.guilds);
+        }
+
+        // Bot control
+        async function controlBot(action) {
+            try {
+                const response = await fetch(`/api/bot/${action}`, { method: 'POST' });
+                const data = await response.json();
+                alert(data.message);
+            } catch (error) {
+                alert('Error: ' + error.message);
+            }
+        }
+
+        // Initialize
+        connectWebSocket();
+        fetchStatus();
+        fetchGuilds();
+        refreshAIStatus();
+
+        // Refresh data periodically
+        setInterval(fetchStatus, 10000);
+        setInterval(fetchGuilds, 30000);
+    </script>
+</body>
+</html>
