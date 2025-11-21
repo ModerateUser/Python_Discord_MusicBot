@@ -16,27 +16,51 @@ if errorlevel 1 (
     exit /b 1
 )
 
-REM Check if venv exists
+REM FIX LAUNCH #2: Check if venv exists and is valid
+set "USE_VENV=0"
+if exist "venv\Scripts\python.exe" (
+    echo [INFO] Virtual environment found
+    set "USE_VENV=1"
+) else if exist "venv\" (
+    echo [WARNING] venv folder exists but is incomplete/corrupted
+    echo [INFO] Removing incomplete venv...
+    rmdir /s /q "venv"
+)
+
+REM Create venv if it doesn't exist
 if not exist "venv\" (
-    echo [SETUP] Virtual environment not found. Creating...
+    echo [SETUP] Creating virtual environment...
     python -m venv venv
     if errorlevel 1 (
-        echo [ERROR] Failed to create virtual environment
-        pause
-        exit /b 1
+        echo [WARNING] Failed to create virtual environment
+        echo [INFO] Will run without venv (using system Python)
+        set "USE_VENV=0"
+    ) else (
+        echo [SUCCESS] Virtual environment created
+        set "USE_VENV=1"
     )
-    echo [SUCCESS] Virtual environment created
     echo.
 )
 
-REM Activate virtual environment
-echo [INFO] Activating virtual environment...
-call venv\Scripts\activate.bat
-if errorlevel 1 (
-    echo [ERROR] Failed to activate virtual environment
-    pause
-    exit /b 1
+REM Activate virtual environment if available
+if "%USE_VENV%"=="1" (
+    if exist "venv\Scripts\activate.bat" (
+        echo [INFO] Activating virtual environment...
+        call venv\Scripts\activate.bat
+        if errorlevel 1 (
+            echo [WARNING] Failed to activate venv, using system Python
+            set "USE_VENV=0"
+        )
+    ) else (
+        echo [WARNING] venv\Scripts\activate.bat not found
+        echo [INFO] Using system Python instead
+        set "USE_VENV=0"
+    )
+) else (
+    echo [INFO] Using system Python (no venv)
 )
+
+echo.
 
 REM Check if config.json exists
 if not exist "config.json" (
@@ -54,6 +78,10 @@ if errorlevel 1 (
     pip install fastapi uvicorn[standard] jinja2 python-multipart websockets
     if errorlevel 1 (
         echo [ERROR] Failed to install dependencies
+        echo.
+        echo Try running manually:
+        echo   pip install fastapi uvicorn[standard] jinja2 python-multipart websockets
+        echo.
         pause
         exit /b 1
     )
@@ -63,10 +91,8 @@ if errorlevel 1 (
 
 REM Check if templates directory exists
 if not exist "web_dashboard\templates\" (
-    echo [ERROR] Templates directory not found!
-    echo Please ensure web_dashboard/templates/ exists with dashboard.html
-    pause
-    exit /b 1
+    echo [INFO] Creating templates directory...
+    mkdir "web_dashboard\templates"
 )
 
 REM Create static directory if it doesn't exist
@@ -87,6 +113,9 @@ echo.
 echo API Documentation:
 echo   http://localhost:8000/docs
 echo.
+echo Health Check:
+echo   http://localhost:8000/health
+echo.
 echo Press Ctrl+C to stop the dashboard
 echo ========================================
 echo.
@@ -100,6 +129,8 @@ if errorlevel 1 (
     echo ========================================
     echo [ERROR] Dashboard stopped with an error
     echo ========================================
+    echo.
+    echo Check the error message above for details
 )
 
 echo.
