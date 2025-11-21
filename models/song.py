@@ -1,20 +1,18 @@
 """
 Song and Queue data models
 """
-from typing import List, Optional, Any
+from typing import List, Optional
 from dataclasses import dataclass
-
 
 @dataclass
 class Song:
     """Represents a song in the queue"""
-    source: Any  # Can be file path or YTDLSource
+    source: any  # Can be file path or YTDLSource
     title: str
     is_local: bool = False
     
     def __repr__(self) -> str:
         return f"Song(title='{self.title}', is_local={self.is_local})"
-
 
 class MusicQueue:
     """Manages the music queue for a guild"""
@@ -23,7 +21,6 @@ class MusicQueue:
         self.songs: List[Song] = []
         self.current: Optional[Song] = None
         self.loop: bool = False
-        self.volume: float = 0.5  # Default volume (50%)
     
     def add(self, song: Song) -> None:
         """Add a song to the queue"""
