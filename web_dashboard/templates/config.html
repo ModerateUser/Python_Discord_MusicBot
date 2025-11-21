@@ -1,445 +1,249 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Configuration - {{ bot_name }}</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+{% extends "base.html" %}
 
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 20px;
-        }
+{% block title %}Configuration - {{ bot_name }}{% endblock %}
 
-        .container {
-            max-width: 1000px;
-            margin: 0 auto;
-        }
+{% block content %}
+<div class="alert alert-warning">
+    <strong><i class="fas fa-exclamation-triangle mr-2"></i>Note:</strong> Configuration changes require a bot restart to take effect. This interface is currently read-only.
+</div>
 
-        .header {
-            background: white;
-            padding: 20px 30px;
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
+<div id="loading" class="flex justify-center items-center py-20">
+    <div class="text-center">
+        <div class="spinner mx-auto mb-4"></div>
+        <h2 class="text-xl text-gray-400">Loading configuration...</h2>
+    </div>
+</div>
 
-        .header h1 {
-            color: #667eea;
-            font-size: 28px;
-        }
-
-        .nav-links {
-            display: flex;
-            gap: 15px;
-        }
-
-        .nav-links a {
-            color: #667eea;
-            text-decoration: none;
-            padding: 8px 16px;
-            border-radius: 5px;
-            transition: background 0.3s;
-        }
-
-        .nav-links a:hover {
-            background: #f0f0f0;
-        }
-
-        .card {
-            background: white;
-            padding: 30px;
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
-        }
-
-        .card h2 {
-            color: #333;
-            margin-bottom: 20px;
-            padding-bottom: 10px;
-            border-bottom: 2px solid #667eea;
-        }
-
-        .config-section {
-            margin-bottom: 30px;
-        }
-
-        .config-item {
-            margin-bottom: 20px;
-        }
-
-        .config-item label {
-            display: block;
-            font-weight: 600;
-            color: #555;
-            margin-bottom: 8px;
-        }
-
-        .config-item input,
-        .config-item select,
-        .config-item textarea {
-            width: 100%;
-            padding: 10px;
-            border: 2px solid #e0e0e0;
-            border-radius: 5px;
-            font-size: 14px;
-            transition: border-color 0.3s;
-        }
-
-        .config-item input:focus,
-        .config-item select:focus,
-        .config-item textarea:focus {
-            outline: none;
-            border-color: #667eea;
-        }
-
-        .config-item .help-text {
-            font-size: 12px;
-            color: #888;
-            margin-top: 5px;
-        }
-
-        .config-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-        }
-
-        .status-badge {
-            display: inline-block;
-            padding: 4px 12px;
-            border-radius: 12px;
-            font-size: 12px;
-            font-weight: 600;
-        }
-
-        .status-set {
-            background: #10b981;
-            color: white;
-        }
-
-        .status-not-set {
-            background: #ef4444;
-            color: white;
-        }
-
-        .btn {
-            background: #667eea;
-            color: white;
-            border: none;
-            padding: 12px 24px;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 16px;
-            font-weight: 600;
-            transition: background 0.3s;
-        }
-
-        .btn:hover {
-            background: #5568d3;
-        }
-
-        .btn:disabled {
-            background: #ccc;
-            cursor: not-allowed;
-        }
-
-        .btn-secondary {
-            background: #6b7280;
-        }
-
-        .btn-secondary:hover {
-            background: #4b5563;
-        }
-
-        .button-group {
-            display: flex;
-            gap: 10px;
-            margin-top: 20px;
-        }
-
-        .alert {
-            padding: 15px;
-            border-radius: 5px;
-            margin-bottom: 20px;
-        }
-
-        .alert-info {
-            background: #dbeafe;
-            color: #1e40af;
-            border-left: 4px solid #3b82f6;
-        }
-
-        .alert-warning {
-            background: #fef3c7;
-            color: #92400e;
-            border-left: 4px solid #f59e0b;
-        }
-
-        .loading {
-            text-align: center;
-            padding: 40px;
-            color: #667eea;
-        }
-
-        @media (max-width: 768px) {
-            .config-grid {
-                grid-template-columns: 1fr;
-            }
-
-            .header {
-                flex-direction: column;
-                gap: 15px;
-            }
-
-            .nav-links {
-                flex-direction: column;
-                width: 100%;
-            }
-
-            .nav-links a {
-                text-align: center;
-            }
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>⚙️ {{ bot_name }} Configuration</h1>
-            <div class="nav-links">
-                <a href="/">Dashboard</a>
-                <a href="/logs">Logs</a>
-                <a href="/api/docs">API Docs</a>
+<div id="config-content" style="display: none;">
+    <!-- Bot Configuration -->
+    <div class="bg-gray-800 rounded-lg shadow-lg p-6 mb-6">
+        <h2 class="text-xl font-bold mb-4 flex items-center border-b border-gray-700 pb-3">
+            <i class="fas fa-robot text-purple-500 mr-2"></i>
+            Bot Settings
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+                <label class="block text-sm font-semibold text-gray-400 mb-2">Command Prefix</label>
+                <input type="text" id="command_prefix" readonly 
+                    class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-purple-500">
+                <p class="text-xs text-gray-500 mt-1">The prefix used for bot commands (e.g., !play)</p>
             </div>
-        </div>
-
-        <div class="alert alert-warning">
-            <strong>⚠️ Note:</strong> Configuration changes require a bot restart to take effect. This feature is currently read-only.
-        </div>
-
-        <div id="loading" class="loading">
-            <h2>Loading configuration...</h2>
-        </div>
-
-        <div id="config-content" style="display: none;">
-            <!-- Bot Configuration -->
-            <div class="card">
-                <h2>🤖 Bot Settings</h2>
-                <div class="config-section">
-                    <div class="config-grid">
-                        <div class="config-item">
-                            <label>Command Prefix</label>
-                            <input type="text" id="command_prefix" readonly>
-                            <div class="help-text">The prefix used for bot commands (e.g., !play)</div>
-                        </div>
-                        <div class="config-item">
-                            <label>Playing Status</label>
-                            <input type="text" id="playing" readonly>
-                            <div class="help-text">The status message shown in Discord</div>
-                        </div>
-                    </div>
-                    <div class="config-grid">
-                        <div class="config-item">
-                            <label>Bot Token</label>
-                            <div>
-                                <span id="token_status" class="status-badge">Checking...</span>
-                            </div>
-                            <div class="help-text">Discord bot token (hidden for security)</div>
-                        </div>
-                        <div class="config-item">
-                            <label>Owner ID</label>
-                            <div>
-                                <span id="owner_status" class="status-badge">Checking...</span>
-                            </div>
-                            <div class="help-text">Discord user ID of the bot owner</div>
-                        </div>
-                    </div>
+            <div>
+                <label class="block text-sm font-semibold text-gray-400 mb-2">Playing Status</label>
+                <input type="text" id="playing" readonly 
+                    class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-purple-500">
+                <p class="text-xs text-gray-500 mt-1">The status message shown in Discord</p>
+            </div>
+            <div>
+                <label class="block text-sm font-semibold text-gray-400 mb-2">Bot Token</label>
+                <div>
+                    <span id="token_status" class="badge">Checking...</span>
                 </div>
+                <p class="text-xs text-gray-500 mt-1">Discord bot token (hidden for security)</p>
             </div>
-
-            <!-- Queue Settings -->
-            <div class="card">
-                <h2>🎵 Queue Settings</h2>
-                <div class="config-section">
-                    <div class="config-grid">
-                        <div class="config-item">
-                            <label>Max Queue Size</label>
-                            <input type="number" id="max_queue_size" readonly>
-                            <div class="help-text">Maximum number of songs in queue per server</div>
-                        </div>
-                        <div class="config-item">
-                            <label>Max Playlist Size</label>
-                            <input type="number" id="max_playlist_size" readonly>
-                            <div class="help-text">Maximum songs to add from a playlist</div>
-                        </div>
-                    </div>
+            <div>
+                <label class="block text-sm font-semibold text-gray-400 mb-2">Owner ID</label>
+                <div>
+                    <span id="owner_status" class="badge">Checking...</span>
                 </div>
-            </div>
-
-            <!-- File Settings -->
-            <div class="card">
-                <h2>📁 File Settings</h2>
-                <div class="config-section">
-                    <div class="config-item">
-                        <label>Music Directory</label>
-                        <input type="text" id="music_directory" readonly>
-                        <div class="help-text">Directory for local music files (leave empty to disable)</div>
-                    </div>
-                    <div class="config-item">
-                        <label>Allowed File Extensions</label>
-                        <textarea id="allowed_extensions" rows="2" readonly></textarea>
-                        <div class="help-text">Comma-separated list of allowed audio file extensions</div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- LLM Settings -->
-            <div class="card">
-                <h2>🧠 AI/LLM Settings</h2>
-                <div class="config-section">
-                    <div class="config-grid">
-                        <div class="config-item">
-                            <label>LLM Enabled</label>
-                            <div>
-                                <span id="llm_enabled" class="status-badge">Checking...</span>
-                            </div>
-                            <div class="help-text">Natural language command processing</div>
-                        </div>
-                        <div class="config-item">
-                            <label>LLM Provider</label>
-                            <input type="text" id="llm_provider" readonly>
-                            <div class="help-text">AI provider (openai, anthropic, etc.)</div>
-                        </div>
-                    </div>
-                    <div class="config-item">
-                        <label>LLM Model</label>
-                        <input type="text" id="llm_model" readonly>
-                        <div class="help-text">Model name (e.g., gpt-3.5-turbo)</div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Music Synthesis Settings -->
-            <div class="card">
-                <h2>🎼 Music Synthesis Settings</h2>
-                <div class="config-section">
-                    <div class="config-grid">
-                        <div class="config-item">
-                            <label>Synthesis Enabled</label>
-                            <div>
-                                <span id="synthesis_enabled" class="status-badge">Checking...</span>
-                            </div>
-                            <div class="help-text">AI music generation capability</div>
-                        </div>
-                        <div class="config-item">
-                            <label>Synthesis Backend</label>
-                            <input type="text" id="synthesis_backend" readonly>
-                            <div class="help-text">Backend (suno, musicgen, disabled)</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="alert alert-info">
-                <strong>ℹ️ Info:</strong> To modify configuration, edit the <code>config.json</code> file and restart the bot.
-            </div>
-
-            <div class="button-group">
-                <button class="btn" onclick="refreshConfig()">🔄 Refresh</button>
-                <button class="btn btn-secondary" onclick="window.location.href='/'">← Back to Dashboard</button>
+                <p class="text-xs text-gray-500 mt-1">Discord user ID of the bot owner</p>
             </div>
         </div>
     </div>
 
-    <script>
-        async function loadConfig() {
-            try {
-                const response = await fetch('/api/config');
-                const config = await response.json();
+    <!-- Queue Settings -->
+    <div class="bg-gray-800 rounded-lg shadow-lg p-6 mb-6">
+        <h2 class="text-xl font-bold mb-4 flex items-center border-b border-gray-700 pb-3">
+            <i class="fas fa-list text-green-500 mr-2"></i>
+            Queue Settings
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+                <label class="block text-sm font-semibold text-gray-400 mb-2">Max Queue Size</label>
+                <input type="number" id="max_queue_size" readonly 
+                    class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-purple-500">
+                <p class="text-xs text-gray-500 mt-1">Maximum number of songs in queue per server</p>
+            </div>
+            <div>
+                <label class="block text-sm font-semibold text-gray-400 mb-2">Max Playlist Size</label>
+                <input type="number" id="max_playlist_size" readonly 
+                    class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-purple-500">
+                <p class="text-xs text-gray-500 mt-1">Maximum songs to add from a playlist</p>
+            </div>
+        </div>
+    </div>
 
-                // Bot settings
-                document.getElementById('command_prefix').value = config.command_prefix || '!';
-                document.getElementById('playing').value = config.playing || '';
+    <!-- File Settings -->
+    <div class="bg-gray-800 rounded-lg shadow-lg p-6 mb-6">
+        <h2 class="text-xl font-bold mb-4 flex items-center border-b border-gray-700 pb-3">
+            <i class="fas fa-folder text-blue-500 mr-2"></i>
+            File Settings
+        </h2>
+        <div class="space-y-4">
+            <div>
+                <label class="block text-sm font-semibold text-gray-400 mb-2">Music Directory</label>
+                <input type="text" id="music_directory" readonly 
+                    class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-purple-500">
+                <p class="text-xs text-gray-500 mt-1">Directory for local music files (leave empty to disable)</p>
+            </div>
+            <div>
+                <label class="block text-sm font-semibold text-gray-400 mb-2">Allowed File Extensions</label>
+                <textarea id="allowed_extensions" rows="2" readonly 
+                    class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-purple-500"></textarea>
+                <p class="text-xs text-gray-500 mt-1">Comma-separated list of allowed audio file extensions</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- LLM Settings -->
+    <div class="bg-gray-800 rounded-lg shadow-lg p-6 mb-6">
+        <h2 class="text-xl font-bold mb-4 flex items-center border-b border-gray-700 pb-3">
+            <i class="fas fa-brain text-purple-500 mr-2"></i>
+            AI/LLM Settings
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+                <label class="block text-sm font-semibold text-gray-400 mb-2">LLM Enabled</label>
+                <div>
+                    <span id="llm_enabled" class="badge">Checking...</span>
+                </div>
+                <p class="text-xs text-gray-500 mt-1">Natural language command processing</p>
+            </div>
+            <div>
+                <label class="block text-sm font-semibold text-gray-400 mb-2">LLM Provider</label>
+                <input type="text" id="llm_provider" readonly 
+                    class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-purple-500">
+                <p class="text-xs text-gray-500 mt-1">AI provider (openai, anthropic, etc.)</p>
+            </div>
+            <div class="md:col-span-2">
+                <label class="block text-sm font-semibold text-gray-400 mb-2">LLM Model</label>
+                <input type="text" id="llm_model" readonly 
+                    class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-purple-500">
+                <p class="text-xs text-gray-500 mt-1">Model name (e.g., gpt-3.5-turbo)</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Music Synthesis Settings -->
+    <div class="bg-gray-800 rounded-lg shadow-lg p-6 mb-6">
+        <h2 class="text-xl font-bold mb-4 flex items-center border-b border-gray-700 pb-3">
+            <i class="fas fa-waveform-lines text-yellow-500 mr-2"></i>
+            Music Synthesis Settings
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+                <label class="block text-sm font-semibold text-gray-400 mb-2">Synthesis Enabled</label>
+                <div>
+                    <span id="synthesis_enabled" class="badge">Checking...</span>
+                </div>
+                <p class="text-xs text-gray-500 mt-1">AI music generation capability</p>
+            </div>
+            <div>
+                <label class="block text-sm font-semibold text-gray-400 mb-2">Synthesis Backend</label>
+                <input type="text" id="synthesis_backend" readonly 
+                    class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-purple-500">
+                <p class="text-xs text-gray-500 mt-1">Backend (suno, musicgen, disabled)</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="alert alert-info">
+        <strong><i class="fas fa-info-circle mr-2"></i>Info:</strong> To modify configuration, edit the <code class="bg-gray-700 px-2 py-1 rounded">config.json</code> file and restart the bot.
+    </div>
+
+    <div class="flex space-x-4 mt-6">
+        <button onclick="refreshConfig()" class="btn-primary">
+            <i class="fas fa-sync-alt mr-2"></i>Refresh
+        </button>
+        <button onclick="window.location.href='/'" class="btn-secondary">
+            <i class="fas fa-arrow-left mr-2"></i>Back to Dashboard
+        </button>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    async function loadConfig() {
+        try {
+            const response = await fetch('/api/config');
+            const config = await response.json();
+
+            // Bot settings
+            document.getElementById('command_prefix').value = config.command_prefix || '!';
+            document.getElementById('playing').value = config.playing || '';
+            
+            // Token/Owner status
+            const tokenStatus = document.getElementById('token_status');
+            tokenStatus.textContent = config.token_set ? '✓ Set' : '✗ Not Set';
+            tokenStatus.className = config.token_set ? 'badge badge-success' : 'badge badge-danger';
+            
+            const ownerStatus = document.getElementById('owner_status');
+            ownerStatus.textContent = config.owner_id_set ? '✓ Set' : '✗ Not Set';
+            ownerStatus.className = config.owner_id_set ? 'badge badge-success' : 'badge badge-danger';
+
+            // Queue settings
+            document.getElementById('max_queue_size').value = config.max_queue_size || 100;
+            document.getElementById('max_playlist_size').value = config.max_playlist_size || 500;
+
+            // File settings
+            document.getElementById('music_directory').value = config.music_directory || 'Not configured';
+            document.getElementById('allowed_extensions').value = (config.allowed_file_extensions || []).join(', ');
+
+            // LLM settings
+            if (config.llm) {
+                const llmEnabled = document.getElementById('llm_enabled');
+                llmEnabled.textContent = config.llm.enabled ? '✓ Enabled' : '✗ Disabled';
+                llmEnabled.className = config.llm.enabled ? 'badge badge-success' : 'badge badge-danger';
                 
-                // Token/Owner status
-                const tokenStatus = document.getElementById('token_status');
-                tokenStatus.textContent = config.token_set ? '✓ Set' : '✗ Not Set';
-                tokenStatus.className = config.token_set ? 'status-badge status-set' : 'status-badge status-not-set';
-                
-                const ownerStatus = document.getElementById('owner_status');
-                ownerStatus.textContent = config.owner_id_set ? '✓ Set' : '✗ Not Set';
-                ownerStatus.className = config.owner_id_set ? 'status-badge status-set' : 'status-badge status-not-set';
-
-                // Queue settings
-                document.getElementById('max_queue_size').value = config.max_queue_size || 100;
-                document.getElementById('max_playlist_size').value = config.max_playlist_size || 500;
-
-                // File settings
-                document.getElementById('music_directory').value = config.music_directory || 'Not configured';
-                document.getElementById('allowed_extensions').value = (config.allowed_file_extensions || []).join(', ');
-
-                // LLM settings
-                if (config.llm) {
-                    const llmEnabled = document.getElementById('llm_enabled');
-                    llmEnabled.textContent = config.llm.enabled ? '✓ Enabled' : '✗ Disabled';
-                    llmEnabled.className = config.llm.enabled ? 'status-badge status-set' : 'status-badge status-not-set';
-                    
-                    document.getElementById('llm_provider').value = config.llm.provider || 'none';
-                    document.getElementById('llm_model').value = config.llm.model || 'none';
-                } else {
-                    document.getElementById('llm_enabled').textContent = '✗ Not Configured';
-                    document.getElementById('llm_enabled').className = 'status-badge status-not-set';
-                    document.getElementById('llm_provider').value = 'Not configured';
-                    document.getElementById('llm_model').value = 'Not configured';
-                }
-
-                // Music synthesis settings
-                if (config.music_synthesis) {
-                    const synthEnabled = document.getElementById('synthesis_enabled');
-                    synthEnabled.textContent = config.music_synthesis.enabled ? '✓ Enabled' : '✗ Disabled';
-                    synthEnabled.className = config.music_synthesis.enabled ? 'status-badge status-set' : 'status-badge status-not-set';
-                    
-                    document.getElementById('synthesis_backend').value = config.music_synthesis.backend || 'disabled';
-                } else {
-                    document.getElementById('synthesis_enabled').textContent = '✗ Not Configured';
-                    document.getElementById('synthesis_enabled').className = 'status-badge status-not-set';
-                    document.getElementById('synthesis_backend').value = 'Not configured';
-                }
-
-                // Show content, hide loading
-                document.getElementById('loading').style.display = 'none';
-                document.getElementById('config-content').style.display = 'block';
-
-            } catch (error) {
-                console.error('Error loading config:', error);
-                document.getElementById('loading').innerHTML = `
-                    <h2 style="color: #ef4444;">❌ Error Loading Configuration</h2>
-                    <p>${error.message}</p>
-                    <button class="btn" onclick="refreshConfig()">Try Again</button>
-                `;
+                document.getElementById('llm_provider').value = config.llm.provider || 'none';
+                document.getElementById('llm_model').value = config.llm.model || 'none';
+            } else {
+                document.getElementById('llm_enabled').textContent = '✗ Not Configured';
+                document.getElementById('llm_enabled').className = 'badge badge-danger';
+                document.getElementById('llm_provider').value = 'Not configured';
+                document.getElementById('llm_model').value = 'Not configured';
             }
-        }
 
-        function refreshConfig() {
-            document.getElementById('loading').style.display = 'block';
-            document.getElementById('config-content').style.display = 'none';
-            loadConfig();
-        }
+            // Music synthesis settings
+            if (config.music_synthesis) {
+                const synthEnabled = document.getElementById('synthesis_enabled');
+                synthEnabled.textContent = config.music_synthesis.enabled ? '✓ Enabled' : '✗ Disabled';
+                synthEnabled.className = config.music_synthesis.enabled ? 'badge badge-success' : 'badge badge-danger';
+                
+                document.getElementById('synthesis_backend').value = config.music_synthesis.backend || 'disabled';
+            } else {
+                document.getElementById('synthesis_enabled').textContent = '✗ Not Configured';
+                document.getElementById('synthesis_enabled').className = 'badge badge-danger';
+                document.getElementById('synthesis_backend').value = 'Not configured';
+            }
 
-        // Load config on page load
-        window.addEventListener('DOMContentLoaded', loadConfig);
-    </script>
-</body>
-</html>
+            // Show content, hide loading
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('config-content').style.display = 'block';
+
+        } catch (error) {
+            console.error('Error loading config:', error);
+            document.getElementById('loading').innerHTML = `
+                <div class="text-center">
+                    <i class="fas fa-exclamation-triangle text-red-500 text-5xl mb-4"></i>
+                    <h2 class="text-xl text-red-400 mb-2">Error Loading Configuration</h2>
+                    <p class="text-gray-400 mb-4">${error.message}</p>
+                    <button onclick="refreshConfig()" class="btn-primary">
+                        <i class="fas fa-redo mr-2"></i>Try Again
+                    </button>
+                </div>
+            `;
+        }
+    }
+
+    function refreshConfig() {
+        document.getElementById('loading').style.display = 'flex';
+        document.getElementById('config-content').style.display = 'none';
+        loadConfig();
+    }
+
+    // Load config on page load
+    document.addEventListener('DOMContentLoaded', loadConfig);
+</script>
+{% endblock %}
