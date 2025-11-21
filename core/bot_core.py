@@ -3,6 +3,7 @@ Bot Core - Main bot initialization and event handling
 Simplified and modular bot entry point using dependency injection
 
 FIX WEBUI #7: Integrated dashboard bridge for real-time updates
+FIX MEDIUM #3: Load help cog in bot_core.py
 """
 import discord
 from discord.ext import commands
@@ -57,7 +58,14 @@ class MusicBot(commands.Bot):
     
     async def load_cogs(self):
         """Load all cogs"""
-        cogs = ['cogs.music', 'cogs.playlist', 'cogs.queue_manager', 'cogs.ai_music']
+        # FIX MEDIUM #3: Added help cog to load list
+        cogs = [
+            'cogs.help',           # Load help first
+            'cogs.music', 
+            'cogs.playlist', 
+            'cogs.queue_manager', 
+            'cogs.ai_music'
+        ]
         
         for cog in cogs:
             try:
@@ -230,11 +238,11 @@ def create_bot() -> MusicBot:
     intents.guilds = True
     intents.members = True  # For mention detection
     
-    # Create bot instance
+    # Create bot instance with custom help disabled (we have our own)
     bot = MusicBot(
         command_prefix=get_prefix,
         intents=intents,
-        help_command=None  # We'll create a custom help command
+        help_command=None  # Disabled - using custom help cog
     )
     
     # Register basic commands
@@ -294,6 +302,7 @@ def register_basic_commands(bot: MusicBot):
             name='Usage',
             value=(
                 f'`{config.command_prefix}play <song>` or `@{bot.user.name} play <song>`\n'
+                f'`{config.command_prefix}help` for all commands\n'
                 f'`!/ <natural language>` (with LLM)'
             ),
             inline=False
@@ -337,7 +346,7 @@ def register_basic_commands(bot: MusicBot):
                 inline=True
             )
         
-        embed.set_footer(text=f'Made with discord.py')
+        embed.set_footer(text=f'Made with discord.py | Use {config.command_prefix}help for commands')
         
         await ctx.send(embed=embed)
     
