@@ -1,6 +1,7 @@
 """
 Discord Music Bot - Main Entry Point
 A feature-rich music bot with security, playlist management, and advanced AI features
+Includes AI music synthesis capabilities
 """
 import discord
 from discord.ext import commands
@@ -23,8 +24,9 @@ intents.voice_states = True
 intents.guilds = True
 intents.members = True  # For mention detection
 
-# Global reference to advanced AI service
+# Global references
 advanced_ai_service = None
+synthesis_service = None
 
 def get_prefix(bot, message):
     """
@@ -50,14 +52,39 @@ async def on_ready():
     logger.info(f'Command prefix: {config.command_prefix} or @{bot.user.name}')
     logger.info(f'Natural language prefix: !/ (when LLM is loaded)')
     
-    # Initialize advanced AI service
-    await initialize_advanced_ai_service()
+    # Initialize services
+    await initialize_services()
     
     # Set bot status
     activity = discord.Game(name=config.playing)
     await bot.change_presence(activity=activity)
     
     logger.info('Bot is ready!')
+
+
+async def initialize_services():
+    """Initialize all AI services"""
+    global advanced_ai_service, synthesis_service
+    
+    # Initialize music synthesis service
+    try:
+        from services.music_synthesis_service import create_music_synthesis_service
+        
+        ai_cog = bot.get_cog('AI Music')
+        llm_service = ai_cog.llm if ai_cog else None
+        
+        synthesis_service = create_music_synthesis_service(config.config, llm_service)
+        
+        if await synthesis_service.is_available():
+            logger.info(f'✅ Music Synthesis Service initialized (Backend: {synthesis_service.backend.value})')
+        else:
+            logger.info('⚠️ Music synthesis disabled (check config.json)')
+    except Exception as e:
+        logger.warning(f'⚠️ Music synthesis unavailable: {e}')
+        synthesis_service = None
+    
+    # Initialize advanced AI service
+    await initialize_advanced_ai_service()
 
 
 async def initialize_advanced_ai_service():
@@ -67,7 +94,7 @@ async def initialize_advanced_ai_service():
     ai_cog = bot.get_cog('AI Music')
     if ai_cog and await ai_cog.llm.is_available():
         from services.ai_music_service import create_advanced_ai_service
-        advanced_ai_service = create_advanced_ai_service(ai_cog.llm)
+        advanced_ai_service = create_advanced_ai_service(ai_cog.llm, synthesis_service)
         logger.info('✅ Advanced AI Music Service initialized')
     else:
         logger.info('⚠️ Advanced AI features unavailable (LLM not loaded)')
@@ -96,7 +123,7 @@ async def on_message(message):
 async def handle_natural_language(message: discord.Message):
     """
     Handle natural language commands with !/ prefix
-    Supports complex action chaining and advanced AI features
+    Supports complex action chaining and advanced AI features including music synthesis
     """
     # Extract the natural language query
     query = message.content[2:].strip()  # Remove !/ prefix
@@ -125,7 +152,8 @@ async def handle_natural_language(message: discord.Message):
         # Check if this is a complex command (contains "then", "after", "and then", etc.)
         is_complex = any(keyword in query.lower() for keyword in [
             'then', 'after', 'and then', 'followed by', 'next', 'create', 'generate',
-            'auto-dj', 'auto dj', 'similar', 'like', 'mood', 'transition', 'shuffle'
+            'auto-dj', 'auto dj', 'similar', 'like', 'mood', 'transition', 'shuffle',
+            'synthesize', 'compose', 'make music', 'original'
         ])
         
         if is_complex and advanced_ai_service:
@@ -252,6 +280,52 @@ async def execute_single_action(
         if music_cog:
             await music_cog.loop(message)
     
+    elif action.action_type == ActionType.SYNTHESIZE_MUSIC:
+        # NEW: AI Music Synthesis
+        if not synthesis_service or not await synthesis_service.is_available():
+            await message.channel.send("❌ Music synthesis not available. Check config.json to enable it.")
+            return
+        
+        prompt = action.parameters.get('prompt', '')
+        style = action.parameters.get('style')
+        mood = action.parameters.get('mood')
+        duration = action.parameters.get('duration', 30)
+        use_history = action.parameters.get('use_history', True)
+        
+        if not prompt:
+            await message.channel.send("❌ No prompt provided for music synthesis")
+            return
+        
+        # Show synthesis progress
+        synth_msg = await message.channel.send(f"🎼 Synthesizing music: **{prompt}**\n⏳ This may take 30-120 seconds...")
+        
+        try:
+            # Synthesize music
+            file_path = await advanced_ai_service.synthesize_music(
+                prompt=prompt,
+                guild_id=message.guild.id,
+                style=style,
+                mood=mood,
+                duration=duration,
+                use_history=use_history
+            )
+            
+            if file_path:
+                await synth_msg.edit(content=f"✅ Music synthesized successfully!\n🎵 Playing: **{prompt}**")
+                
+                # Play the synthesized music
+                if music_cog:
+                    # Use local file playback
+                    await music_cog.play(message, query=file_path)
+                else:
+                    await message.channel.send("❌ Music cog not available to play synthesized audio")
+            else:
+                await synth_msg.edit(content="❌ Music synthesis failed. Check logs for details.")
+        
+        except Exception as e:
+            logger.error(f"Error in music synthesis action: {e}", exc_info=True)
+            await synth_msg.edit(content=f"❌ Synthesis error: {str(e)}")
+    
     elif action.action_type == ActionType.GENERATE_PLAYLIST:
         # Generate AI playlist
         mood = action.parameters.get('mood', 'varied')
@@ -372,7 +446,7 @@ async def parse_natural_language_intent(query: str, ai_cog) -> dict:
 User input: "{query}"
 
 Determine:
-1. command: The main command (play, skip, queue, pause, resume, stop, loop, volume, playlist, search, suggest)
+1. command: The main command (play, skip, queue, pause, resume, stop, loop, volume, playlist, search, suggest, synthesize)
 2. parameters: Any parameters needed (song name, volume level, playlist name, etc.)
 3. thinking_message: A brief message showing what you understood (max 100 chars)
 
@@ -385,6 +459,7 @@ Examples:
 - "skip this" → {{"command": "skip", "parameters": {{}}, "thinking_message": "⏭️ Skipping song"}}
 - "set volume to 50" → {{"command": "volume", "parameters": {{"level": 50}}, "thinking_message": "🔊 Setting volume to 50%"}}
 - "suggest some jazz" → {{"command": "suggest", "parameters": {{"criteria": "jazz"}}, "thinking_message": "🎷 Suggesting jazz songs"}}
+- "synthesize chill music" → {{"command": "synthesize", "parameters": {{"prompt": "chill music", "mood": "relaxed"}}, "thinking_message": "🎼 Synthesizing chill music"}}
 """
     
     try:
@@ -427,6 +502,36 @@ async def execute_natural_language_command(
                 await music_cog.play(message, query=query)
             else:
                 await thinking_msg.edit(content="❌ Music system not available")
+        
+        elif command == 'synthesize':
+            # Synthesize music
+            if not synthesis_service or not await synthesis_service.is_available():
+                await thinking_msg.edit(content="❌ Music synthesis not available. Check config.json to enable it.")
+                return
+            
+            prompt = parameters.get('prompt', '')
+            if not prompt:
+                await thinking_msg.edit(content="❌ Please specify what kind of music to synthesize")
+                return
+            
+            await thinking_msg.edit(content=f"🎼 Synthesizing: **{prompt}**\n⏳ This may take 30-120 seconds...")
+            
+            # Synthesize music
+            file_path = await advanced_ai_service.synthesize_music(
+                prompt=prompt,
+                guild_id=message.guild.id,
+                style=parameters.get('style'),
+                mood=parameters.get('mood'),
+                duration=parameters.get('duration', 30),
+                use_history=True
+            )
+            
+            if file_path:
+                await thinking_msg.edit(content=f"✅ Music synthesized!\n🎵 Playing: **{prompt}**")
+                if music_cog:
+                    await music_cog.play(message, query=file_path)
+            else:
+                await thinking_msg.edit(content="❌ Music synthesis failed")
         
         elif command == 'skip':
             # Skip current song
@@ -585,10 +690,11 @@ async def info(ctx: commands.Context):
     embed.add_field(name='Prefix', value=f'{config.command_prefix} or @mention', inline=True)
     
     ai_status = "✅ Enabled" if advanced_ai_service else "⚠️ Unavailable"
+    synthesis_status = "✅ Enabled" if (synthesis_service and await synthesis_service.is_available()) else "⚠️ Disabled"
     
     embed.add_field(
         name='Features',
-        value=f'✅ YouTube Streaming\n✅ Local File Playback\n✅ Playlist Management\n✅ Queue System\n✅ Natural Language Commands\n{ai_status} Advanced AI Features',
+        value=f'✅ YouTube Streaming\n✅ Local File Playback\n✅ Playlist Management\n✅ Queue System\n✅ Natural Language Commands\n{ai_status} Advanced AI Features\n{synthesis_status} AI Music Synthesis',
         inline=False
     )
     
@@ -602,7 +708,14 @@ async def info(ctx: commands.Context):
         embed.add_field(
             name='AI Features',
             value='🎵 Mood playlists\n🎧 Auto-DJ mode\n🎼 Song analysis\n🔍 Similar songs\n📝 Lyrics\n🎭 Mood transitions',
-            inline=False
+            inline=True
+        )
+    
+    if synthesis_service and await synthesis_service.is_available():
+        embed.add_field(
+            name='Music Synthesis',
+            value=f'🎼 AI Music Generation\n🎹 Backend: {synthesis_service.backend.value}\n🎨 Personalized Creation\n⚡ Context-Aware',
+            inline=True
         )
     
     embed.set_footer(text=f'Made with discord.py')
