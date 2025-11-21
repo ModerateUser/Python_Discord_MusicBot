@@ -1,6 +1,8 @@
 """
 Bot Core - Main bot initialization and event handling
 Simplified and modular bot entry point using dependency injection
+
+FIX WEBUI #7: Integrated dashboard bridge for real-time updates
 """
 import discord
 from discord.ext import commands
@@ -34,6 +36,9 @@ class MusicBot(commands.Bot):
         
         # Set bot attributes from config
         self.llm_config = config.llm_config
+        
+        # FIX WEBUI #7: Dashboard bridge will be set by integrated launcher
+        self.dashboard_bridge = None
     
     async def setup_hook(self):
         """Called when the bot is setting up"""
@@ -44,6 +49,11 @@ class MusicBot(commands.Bot):
         
         # Initialize services
         await self.service_manager.initialize_all()
+        
+        # FIX WEBUI #7: Register dashboard bridge if available
+        if self.dashboard_bridge:
+            logger.info("Registering dashboard bridge with service manager")
+            self.service_manager.register_service('dashboard_bridge', self.dashboard_bridge)
     
     async def load_cogs(self):
         """Load all cogs"""
@@ -70,6 +80,15 @@ class MusicBot(commands.Bot):
         # Health check
         health = await self.service_manager.health_check()
         logger.info(f"Service health: {health}")
+        
+        # FIX WEBUI #7: Notify dashboard bridge
+        if self.dashboard_bridge:
+            await self.dashboard_bridge._broadcast_update('bot_ready', {
+                'user': str(self.user),
+                'user_id': self.user.id,
+                'guilds': len(self.guilds),
+                'health': health
+            })
         
         logger.info('🎵 Bot is ready!')
     
@@ -99,12 +118,31 @@ class MusicBot(commands.Bot):
     ):
         """Auto-disconnect if bot is alone in voice channel"""
         if member.id == self.user.id:
+            # FIX WEBUI #7: Notify dashboard of voice state changes
+            if self.dashboard_bridge:
+                self.dashboard_bridge.on_voice_state_update(member, before, after)
             return
         
         voice_client = discord.utils.get(self.voice_clients, guild=member.guild)
         if voice_client and len(voice_client.channel.members) == 1:
             logger.info(f'Auto-disconnecting from {voice_client.channel.name} (alone in channel)')
             await voice_client.disconnect()
+    
+    async def on_guild_join(self, guild: discord.Guild):
+        """Called when bot joins a guild"""
+        logger.info(f'Joined guild: {guild.name} (ID: {guild.id})')
+        
+        # FIX WEBUI #7: Notify dashboard
+        if self.dashboard_bridge:
+            self.dashboard_bridge.on_guild_join(guild)
+    
+    async def on_guild_remove(self, guild: discord.Guild):
+        """Called when bot leaves a guild"""
+        logger.info(f'Left guild: {guild.name} (ID: {guild.id})')
+        
+        # FIX WEBUI #7: Notify dashboard
+        if self.dashboard_bridge:
+            self.dashboard_bridge.on_guild_remove(guild)
     
     async def on_command_error(self, ctx: commands.Context, error: commands.CommandError):
         """Global error handler"""
@@ -128,8 +166,46 @@ class MusicBot(commands.Bot):
     async def close(self):
         """Cleanup when bot is shutting down"""
         logger.info("Shutting down bot...")
+        
+        # FIX WEBUI #7: Notify dashboard
+        if self.dashboard_bridge:
+            await self.dashboard_bridge._broadcast_update('bot_shutdown', {
+                'message': 'Bot is shutting down'
+            })
+        
         await self.service_manager.shutdown_all()
         await super().close()
+    
+    def notify_track_start(self, guild_id: int, track_info: dict):
+        """
+        Notify dashboard of track start
+        
+        Args:
+            guild_id: Guild ID
+            track_info: Track information
+        """
+        if self.dashboard_bridge:
+            self.dashboard_bridge.on_track_start(guild_id, track_info)
+    
+    def notify_track_end(self, guild_id: int):
+        """
+        Notify dashboard of track end
+        
+        Args:
+            guild_id: Guild ID
+        """
+        if self.dashboard_bridge:
+            self.dashboard_bridge.on_track_end(guild_id)
+    
+    def notify_queue_update(self, guild_id: int):
+        """
+        Notify dashboard of queue update
+        
+        Args:
+            guild_id: Guild ID
+        """
+        if self.dashboard_bridge:
+            self.dashboard_bridge.on_queue_update(guild_id)
 
 
 def get_prefix(bot, message):
@@ -191,11 +267,13 @@ def register_basic_commands(bot: MusicBot):
         # Check service availability
         synthesis_service = bot.service_manager.get_service('synthesis_service')
         advanced_ai_service = bot.service_manager.get_service('advanced_ai_service')
+        dashboard_bridge = bot.service_manager.get_service('dashboard_bridge')
         
         ai_status = "✅ Enabled" if advanced_ai_service else "⚠️ Unavailable"
         synthesis_status = "✅ Enabled" if (
             synthesis_service and await synthesis_service.is_available()
         ) else "⚠️ Disabled"
+        dashboard_status = "✅ Connected" if dashboard_bridge else "⚠️ Standalone"
         
         embed.add_field(
             name='Features',
@@ -206,7 +284,8 @@ def register_basic_commands(bot: MusicBot):
                 f'✅ Queue System\n'
                 f'✅ Natural Language Commands\n'
                 f'{ai_status} Advanced AI Features\n'
-                f'{synthesis_status} AI Music Synthesis'
+                f'{synthesis_status} AI Music Synthesis\n'
+                f'{dashboard_status} Web Dashboard'
             ),
             inline=False
         )
@@ -242,6 +321,18 @@ def register_basic_commands(bot: MusicBot):
                     f'🎹 Backend: {synthesis_service.backend.value}\n'
                     f'🎨 Personalized Creation\n'
                     f'⚡ Context-Aware'
+                ),
+                inline=True
+            )
+        
+        if dashboard_bridge:
+            embed.add_field(
+                name='Web Dashboard',
+                value=(
+                    f'🌐 Status: Connected\n'
+                    f'📊 Real-time Updates\n'
+                    f'🎮 Remote Control\n'
+                    f'📈 Analytics'
                 ),
                 inline=True
             )
