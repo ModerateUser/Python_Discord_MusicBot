@@ -20,10 +20,19 @@ intents = discord.Intents.default()
 intents.message_content = True
 intents.voice_states = True
 intents.guilds = True
+intents.members = True  # For mention detection
 
-# Create bot instance
+def get_prefix(bot, message):
+    """
+    Dynamic prefix function that allows both custom prefix and bot mentions
+    This allows users to use either !command or @bot command
+    """
+    # Allow both the configured prefix and bot mentions
+    return commands.when_mentioned_or(config.command_prefix)(bot, message)
+
+# Create bot instance with dynamic prefix
 bot = commands.Bot(
-    command_prefix=config.command_prefix,
+    command_prefix=get_prefix,
     intents=intents,
     help_command=None  # We'll create a custom help command
 )
@@ -34,12 +43,28 @@ async def on_ready():
     """Called when the bot is ready"""
     logger.info(f'Logged in as {bot.user.name} (ID: {bot.user.id})')
     logger.info(f'Connected to {len(bot.guilds)} guilds')
+    logger.info(f'Command prefix: {config.command_prefix} or @{bot.user.name}')
     
     # Set bot status
     activity = discord.Game(name=config.playing)
     await bot.change_presence(activity=activity)
     
     logger.info('Bot is ready!')
+
+
+@bot.event
+async def on_message(message):
+    """Process messages for commands"""
+    # Ignore messages from bots
+    if message.author.bot:
+        return
+    
+    # Log mentions for debugging
+    if bot.user.mentioned_in(message):
+        logger.debug(f'Bot mentioned by {message.author} in {message.guild}: {message.content}')
+    
+    # Process commands
+    await bot.process_commands(message)
 
 
 @bot.event
@@ -58,7 +83,7 @@ async def on_voice_state_update(member, before, after):
 async def on_command_error(ctx: commands.Context, error: commands.CommandError):
     """Global error handler"""
     if isinstance(error, commands.CommandNotFound):
-        await ctx.send(f'❌ Command not found. Use `{config.command_prefix}help` for available commands.')
+        await ctx.send(f'❌ Command not found. Use `{config.command_prefix}help` or `@{bot.user.name} help` for available commands.')
     elif isinstance(error, commands.MissingRequiredArgument):
         await ctx.send(f'❌ Missing required argument: `{error.param.name}`')
     elif isinstance(error, commands.BadArgument):
@@ -89,11 +114,17 @@ async def info(ctx: commands.Context):
     
     embed.add_field(name='Servers', value=len(bot.guilds), inline=True)
     embed.add_field(name='Users', value=len(bot.users), inline=True)
-    embed.add_field(name='Prefix', value=config.command_prefix, inline=True)
+    embed.add_field(name='Prefix', value=f'{config.command_prefix} or @mention', inline=True)
     
     embed.add_field(
         name='Features',
         value='✅ YouTube Streaming\n✅ Local File Playback\n✅ Playlist Management\n✅ Queue System',
+        inline=False
+    )
+    
+    embed.add_field(
+        name='Usage',
+        value=f'`{config.command_prefix}play <song>` or `@{bot.user.name} play <song>`',
         inline=False
     )
     
