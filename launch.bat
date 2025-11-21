@@ -21,30 +21,59 @@ if not exist "config.json" (
     echo [WARNING] config.json not found!
     echo Please create config.json with your bot token
     echo.
-    echo Creating template config.json...
-    (
-        echo {
-        echo     "token": "YOUR_BOT_TOKEN_HERE",
-        echo     "owner_id": "YOUR_DISCORD_USER_ID_HERE",
-        echo     "command_prefix": "!",
-        echo     "playing": "!help for commands",
-        echo     "max_queue_size": 100,
-        echo     "max_playlist_size": 500,
-        echo     "allowed_file_extensions": [".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac", ".opus"],
-        echo     "music_directory": null,
-        echo     "llm": {
-        echo         "enabled": false,
-        echo         "provider": "openai",
-        echo         "model": "gpt-3.5-turbo",
-        echo         "api_key": null
-        echo     },
-        echo     "music_synthesis": {
-        echo         "enabled": false,
-        echo         "backend": "disabled"
-        echo     }
-        echo }
-    ) > config.json
-    echo [INFO] Template config.json created. Please edit it with your details.
+    echo Creating template config.json from config.example.json...
+    
+    REM FIX CONFIG #1: Copy from example instead of generating inline
+    if exist "config.example.json" (
+        copy "config.example.json" "config.json" >nul
+        echo [SUCCESS] config.json created from example template
+        echo [INFO] Please edit config.json with your bot token and owner ID
+    ) else (
+        echo [WARNING] config.example.json not found, generating basic template...
+        (
+            echo {
+            echo     "token": "YOUR_BOT_TOKEN_HERE",
+            echo     "owner_id": 123456789012345678,
+            echo     "playing": "!help for commands",
+            echo     "command_prefix": "!",
+            echo     "max_queue_size": 100,
+            echo     "max_playlist_size": 500,
+            echo     "allowed_file_extensions": [".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac", ".opus"],
+            echo     "music_directory": null,
+            echo     "llm": {
+            echo         "enabled": false,
+            echo         "provider": "ollama",
+            echo         "model": "llama3",
+            echo         "api_key": null,
+            echo         "base_url": "http://localhost:11434",
+            echo         "timeout": 30,
+            echo         "max_tokens": 500
+            echo     },
+            echo     "music_synthesis": {
+            echo         "enabled": false,
+            echo         "backend": "disabled",
+            echo         "cache_dir": "generated_music",
+            echo         "max_cache_size_mb": 1000,
+            echo         "default_duration": 30,
+            echo         "default_quality": "medium",
+            echo         "suno_api_key": null,
+            echo         "suno_api_url": "https://api.suno.ai/v1",
+            echo         "musicgen_model": "facebook/musicgen-small"
+            echo     },
+            echo     "web_dashboard": {
+            echo         "enabled": true,
+            echo         "host": "0.0.0.0",
+            echo         "port": 8000
+            echo     }
+            echo }
+        ) > config.json
+        echo [SUCCESS] config.json created with complete template
+        echo [INFO] Please edit config.json with your bot token and owner ID
+    )
+    echo.
+    echo IMPORTANT: Edit config.json and set:
+    echo   - token: Your Discord bot token
+    echo   - owner_id: Your Discord user ID ^(as a number^)
     echo.
     pause
     exit /b 1
