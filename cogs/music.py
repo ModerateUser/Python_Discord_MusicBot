@@ -1,14 +1,15 @@
 """
-Music playback commands cog - FIXED VERSION
+Music playback commands cog - ENHANCED FIXED VERSION
 Addresses all critical issues found in testing:
 - Memory leak in loop mode (Issue #2)
 - Volume persistence for local files (Issue #1)
 - Deadlock potential (Issue #3)
 - Context loss in callback (Issue #4)
 - Security vulnerability (Issue #6)
-- Queue size race condition (Issue #7)
+- Queue size race condition (Issue #7) - ENHANCED
 - Missing cleanup on unload (Issue #8)
 - Cleanup task error handling (Issue #5)
+- FIX #9: Async context handling in callbacks
 """
 import discord
 from discord.ext import commands
@@ -39,6 +40,7 @@ class Music(commands.Cog):
         self.bot = bot
         self.queues: Dict[int, MusicQueue] = {}
         self._play_locks: Dict[int, asyncio.Lock] = {}
+        self._queue_size_locks: Dict[int, asyncio.Lock] = {}  # FIX #5: Separate lock for queue size
         self._cleanup_error_count: int = 0
         self._cleanup_task = bot.loop.create_task(self._cleanup_inactive_queues())
         logger.info("Music cog initialized")
@@ -67,6 +69,7 @@ class Music(commands.Cog):
         # Clear data structures
         self.queues.clear()
         self._play_locks.clear()
+        self._queue_size_locks.clear()
         
         logger.info("Music cog unloaded successfully")
     
@@ -92,6 +95,9 @@ class Music(commands.Cog):
                     
                     if guild_id in self._play_locks:
                         del self._play_locks[guild_id]
+                    
+                    if guild_id in self._queue_size_locks:
+                        del self._queue_size_locks[guild_id]
                 
                 # Reset error count on successful cleanup
                 self._cleanup_error_count = 0
@@ -119,6 +125,15 @@ class Music(commands.Cog):
         if guild_id not in self._play_locks:
             self._play_locks[guild_id] = asyncio.Lock()
         return self._play_locks[guild_id]
+    
+    def get_queue_size_lock(self, guild_id: int) -> asyncio.Lock:
+        """
+        FIX #5: Get or create queue size lock for guild
+        Separate lock to prevent race conditions when checking queue size
+        """
+        if guild_id not in self._queue_size_locks:
+            self._queue_size_locks[guild_id] = asyncio.Lock()
+        return self._queue_size_locks[guild_id]
     
     @commands.command(name='join')
     async def join(self, ctx: commands.Context):
@@ -160,12 +175,12 @@ class Music(commands.Cog):
             await ctx.send('❌ Error disconnecting from voice channel')
     
     @commands.command(name='play', aliases=['p'])
-    @commands.cooldown(1, 2, commands.BucketType.user)  # FIX #18: Rate limiting
+    @commands.cooldown(1, 2, commands.BucketType.user)  # Rate limiting
     async def play(self, ctx: commands.Context, *, query: str):
         """
         Play audio from YouTube/local file
+        FIX #5: Enhanced race condition protection with atomic queue size check
         FIX #6: Security - check file permissions before existence
-        FIX #7: Race condition - use lock for queue size check
         FIX #13: Query length validation
         """
         # Validate query length
@@ -188,12 +203,13 @@ class Music(commands.Cog):
         
         guild_id = ctx.guild.id
         queue = self.get_queue(guild_id)
-        lock = self.get_play_lock(guild_id)
+        queue_size_lock = self.get_queue_size_lock(guild_id)
         
-        # FIX #7: Use lock to prevent race condition on queue size
-        async with lock:
-            # Check queue size limit
-            if len(queue) >= config.max_queue_size:
+        # FIX #5: Use dedicated lock for atomic queue size check and add operation
+        async with queue_size_lock:
+            # Check queue size limit INSIDE the lock
+            current_size = len(queue)
+            if current_size >= config.max_queue_size:
                 await ctx.send(f'❌ Queue is full! Maximum size: {config.max_queue_size}')
                 return
             
@@ -214,10 +230,10 @@ class Music(commands.Cog):
                         song = Song(query, os.path.basename(query), is_local=True)
                         queue.add(song)
                         
-                        if not ctx.voice_client.is_playing():
-                            # Release lock before playing
-                            pass  # Lock will be released at end of block
-                        else:
+                        # Check if we should start playing
+                        should_play = not ctx.voice_client.is_playing()
+                        
+                        if not should_play:
                             await ctx.send(f'➕ Added to queue: **{song.title}**')
                     except Exception as e:
                         logger.error(f"Error adding local file: {e}", exc_info=True)
@@ -243,10 +259,10 @@ class Music(commands.Cog):
                         song = Song(player, player.title, is_local=False)
                         queue.add(song)
                         
-                        if not ctx.voice_client.is_playing():
-                            # Release lock before playing
-                            pass  # Lock will be released at end of block
-                        else:
+                        # Check if we should start playing
+                        should_play = not ctx.voice_client.is_playing()
+                        
+                        if not should_play:
                             await ctx.send(f'➕ Added to queue: **{song.title}**')
                             
                     except Exception as e:
@@ -254,7 +270,7 @@ class Music(commands.Cog):
                         await ctx.send('❌ Error: Could not play that track')
                         return
         
-        # Start playing if nothing is playing (outside the lock)
+        # Start playing if nothing is playing (outside the lock to prevent deadlock)
         if not ctx.voice_client.is_playing():
             await self._play_next(ctx)
     
@@ -266,6 +282,7 @@ class Music(commands.Cog):
         FIX #2: Memory leak - cleanup old sources
         FIX #3: Deadlock - proper lock management
         FIX #4: Context loss - store guild/channel IDs
+        FIX #9: Async context handling in callbacks
         
         Args:
             ctx: Command context
@@ -285,10 +302,10 @@ class Music(commands.Cog):
             logger.info(f"Voice client disconnected for guild {guild_id}")
             return
         
-        lock = self.get_play_lock(guild_id)
+        play_lock = self.get_play_lock(guild_id)
         
         # FIX #3: Acquire lock only for queue operations, not for playback
-        async with lock:
+        async with play_lock:
             queue = self.get_queue(guild_id)
             song = queue.next()
             
@@ -305,19 +322,30 @@ class Music(commands.Cog):
         # FIX #3: Lock is released here, before setting up callback
         # This prevents deadlock when after_playing tries to call _play_next
         
-        # Create callback that doesn't hold references to ctx
+        # FIX #9: Create callback that properly handles async context
         def after_playing(error):
             if error:
                 logger.error(f'Playback error: {error}')
             
+            # FIX #9: Check if bot loop is still running before scheduling
+            if self.bot.loop.is_closed():
+                logger.warning(f"Bot loop closed, cannot schedule next song for guild {guild_id}")
+                return
+            
             # Use stored IDs instead of ctx
             coro = self._play_next_by_ids(guild_id, channel_id)
-            future = asyncio.run_coroutine_threadsafe(coro, self.bot.loop)
             
             try:
+                # FIX #9: Use asyncio.run_coroutine_threadsafe with proper error handling
+                future = asyncio.run_coroutine_threadsafe(coro, self.bot.loop)
+                
+                # Wait for completion with timeout
                 future.result(timeout=PLAYBACK_TIMEOUT)
             except asyncio.TimeoutError:
                 logger.error(f"Timeout scheduling next song for guild {guild_id}")
+            except RuntimeError as e:
+                # FIX #9: Handle case where event loop is closed
+                logger.error(f"Runtime error scheduling next song: {e}")
             except Exception as e:
                 logger.error(f"Error scheduling next song: {e}", exc_info=True)
         
@@ -448,7 +476,7 @@ class Music(commands.Cog):
         await self._play_next(ctx)
     
     @commands.command(name='search', aliases=['find'])
-    @commands.cooldown(1, 3, commands.BucketType.user)  # FIX #18: Rate limiting
+    @commands.cooldown(1, 3, commands.BucketType.user)  # Rate limiting
     async def search(self, ctx: commands.Context, *, query: str):
         """
         Search for a song on YouTube
