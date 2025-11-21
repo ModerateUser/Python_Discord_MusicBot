@@ -11,6 +11,7 @@ Addresses all critical issues found in testing:
 - Cleanup task error handling (Issue #5)
 - FIX #9: Async context handling in callbacks
 - FIX BUG #2: Race condition in should_play logic - use stored decision consistently
+- FIX BUG #5: Handle User vs Member object for voice attribute
 """
 import discord
 from discord.ext import commands
@@ -137,8 +138,14 @@ class Music(commands.Cog):
         return self._queue_size_locks[guild_id]
     
     @commands.command(name='join')
+    @commands.guild_only()  # FIX BUG #5: Ensure command only works in guilds
     async def join(self, ctx: commands.Context):
         """Join the voice channel"""
+        # FIX BUG #5: Check if author is a Member (has voice attribute)
+        if not isinstance(ctx.author, discord.Member):
+            await ctx.send('❌ This command can only be used in a server!')
+            return
+        
         if not ctx.author.voice:
             await ctx.send('❌ You need to be in a voice channel first!')
             return
@@ -156,6 +163,7 @@ class Music(commands.Cog):
             await ctx.send('❌ Failed to join voice channel. Check bot permissions.')
     
     @commands.command(name='leave', aliases=['disconnect', 'dc'])
+    @commands.guild_only()  # FIX BUG #5: Ensure command only works in guilds
     async def leave(self, ctx: commands.Context):
         """Leave the voice channel"""
         if not ctx.voice_client:
@@ -176,6 +184,7 @@ class Music(commands.Cog):
             await ctx.send('❌ Error disconnecting from voice channel')
     
     @commands.command(name='play', aliases=['p'])
+    @commands.guild_only()  # FIX BUG #5: Ensure command only works in guilds
     @commands.cooldown(1, 2, commands.BucketType.user)  # Rate limiting
     async def play(self, ctx: commands.Context, *, query: str):
         """
@@ -184,10 +193,16 @@ class Music(commands.Cog):
         FIX #6: Security - check file permissions before existence
         FIX #13: Query length validation
         FIX BUG #2: Store should_play decision and use consistently
+        FIX BUG #5: Handle User vs Member object for voice attribute
         """
         # Validate query length
         if not query or len(query) > MAX_QUERY_LENGTH:
             await ctx.send(f'❌ Query must be between 1 and {MAX_QUERY_LENGTH} characters')
+            return
+        
+        # FIX BUG #5: Check if author is a Member (has voice attribute)
+        if not isinstance(ctx.author, discord.Member):
+            await ctx.send('❌ This command can only be used in a server!')
             return
         
         # Ensure bot is in voice channel
@@ -481,6 +496,7 @@ class Music(commands.Cog):
         await self._play_next(ctx)
     
     @commands.command(name='search', aliases=['find'])
+    @commands.guild_only()  # FIX BUG #5: Ensure command only works in guilds
     @commands.cooldown(1, 3, commands.BucketType.user)  # Rate limiting
     async def search(self, ctx: commands.Context, *, query: str):
         """
@@ -505,6 +521,7 @@ class Music(commands.Cog):
                 await ctx.send("❌ Error performing search")
     
     @commands.command(name='pause')
+    @commands.guild_only()  # FIX BUG #5: Ensure command only works in guilds
     async def pause(self, ctx: commands.Context):
         """Pause the current song"""
         if not ctx.voice_client:
@@ -518,6 +535,7 @@ class Music(commands.Cog):
             await ctx.send('❌ Nothing is playing')
     
     @commands.command(name='resume', aliases=['unpause'])
+    @commands.guild_only()  # FIX BUG #5: Ensure command only works in guilds
     async def resume(self, ctx: commands.Context):
         """Resume the paused song"""
         if not ctx.voice_client:
@@ -531,6 +549,7 @@ class Music(commands.Cog):
             await ctx.send('❌ Nothing is paused')
     
     @commands.command(name='skip', aliases=['next', 's'])
+    @commands.guild_only()  # FIX BUG #5: Ensure command only works in guilds
     async def skip(self, ctx: commands.Context):
         """Skip the current song"""
         if not ctx.voice_client:
@@ -544,6 +563,7 @@ class Music(commands.Cog):
             await ctx.send('❌ Nothing is playing')
     
     @commands.command(name='stop')
+    @commands.guild_only()  # FIX BUG #5: Ensure command only works in guilds
     async def stop(self, ctx: commands.Context):
         """Stop playing and clear the queue"""
         guild_id = ctx.guild.id
@@ -557,6 +577,7 @@ class Music(commands.Cog):
         await ctx.send('⏹️ Stopped and cleared queue')
     
     @commands.command(name='loop', aliases=['repeat'])
+    @commands.guild_only()  # FIX BUG #5: Ensure command only works in guilds
     async def loop(self, ctx: commands.Context):
         """Toggle loop mode for current song"""
         guild_id = ctx.guild.id
@@ -566,6 +587,7 @@ class Music(commands.Cog):
         await ctx.send(f'Loop {status}')
     
     @commands.command(name='volume', aliases=['vol', 'v'])
+    @commands.guild_only()  # FIX BUG #5: Ensure command only works in guilds
     async def volume(self, ctx: commands.Context, vol: int):
         """Change volume (0-100)"""
         if not ctx.voice_client:
@@ -587,6 +609,7 @@ class Music(commands.Cog):
         await ctx.send(f'🔊 Volume set to **{vol}%**')
     
     @commands.command(name='nowplaying', aliases=['np', 'current'])
+    @commands.guild_only()  # FIX BUG #5: Ensure command only works in guilds
     async def nowplaying(self, ctx: commands.Context):
         """Show the currently playing song"""
         guild_id = ctx.guild.id
