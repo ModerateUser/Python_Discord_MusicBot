@@ -4,6 +4,7 @@ FIX #12: Config validation timing - graceful error handling
 FIX #2: Added to_dict() method for proper config passing
 FIX #3: Added missing music_synthesis, llm, and llm_config fields
 FIX CONFIG #3: Fixed get_config_template() to match config.example.json
+FIX CONFIG #4: Resolve config.json path relative to project root, not CWD
 """
 import json
 import os
@@ -30,6 +31,19 @@ class ConfigurationError(Exception):
     pass
 
 
+def get_project_root() -> Path:
+    """
+    FIX CONFIG #4: Get the project root directory
+    This ensures config.json is always loaded from the project root,
+    regardless of the current working directory.
+    
+    Returns:
+        Path to project root (where bot.py is located)
+    """
+    # This file is in core/config.py, so project root is parent of parent
+    return Path(__file__).parent.parent.resolve()
+
+
 class Config:
     """
     Bot configuration with validation and security features
@@ -37,6 +51,7 @@ class Config:
     FIX #2: Added to_dict() method
     FIX #3: Added missing fields
     FIX CONFIG #3: Fixed template generation
+    FIX CONFIG #4: Resolve config path relative to project root
     """
     
     def __init__(self, config_path: str = 'config.json', validate: bool = True) -> None:
@@ -44,12 +59,18 @@ class Config:
         Initialize configuration
         
         FIX #12: Add validate parameter to allow deferred validation
+        FIX CONFIG #4: Resolve config_path relative to project root
         
         Args:
-            config_path: Path to configuration file
+            config_path: Path to configuration file (relative to project root)
             validate: Whether to validate immediately (default True)
         """
-        self.config_path: str = config_path
+        # FIX CONFIG #4: Resolve config path relative to project root
+        if not os.path.isabs(config_path):
+            self.config_path = str(get_project_root() / config_path)
+        else:
+            self.config_path = config_path
+        
         self.token: str = ""
         self.owner_id: int = 0
         self.playing: str = DEFAULT_PLAYING
@@ -111,6 +132,7 @@ class Config:
         """
         Load configuration from file or environment variables
         FIX #12: Better error messages for common issues
+        FIX CONFIG #4: Show resolved config path in messages
         """
         # Try environment variables first (more secure)
         self.token = os.getenv('DISCORD_BOT_TOKEN', '')
@@ -138,6 +160,7 @@ class Config:
         FIX #12: Detailed error messages for file issues
         FIX #3: Load LLM and music synthesis config
         FIX CONFIG #3: Load web_dashboard config
+        FIX CONFIG #4: Show absolute path in log messages
         """
         try:
             with open(self.config_path, 'r', encoding='utf-8') as f:
@@ -186,9 +209,13 @@ class Config:
             )
         except FileNotFoundError:
             # FIX #12: Helpful message for missing config file
+            # FIX CONFIG #4: Show both relative and absolute paths
             raise ConfigurationError(
                 f"Config file not found: {self.config_path}\n"
-                f"Please create a config.json file or set environment variables:\n"
+                f"  Project root: {get_project_root()}\n"
+                f"  Looking for: config.json in project root\n"
+                f"  Current working directory: {os.getcwd()}\n\n"
+                f"Please create a config.json file in the project root or set environment variables:\n"
                 f"  - DISCORD_BOT_TOKEN\n"
                 f"  - DISCORD_OWNER_ID"
             )
@@ -461,12 +488,14 @@ class Config:
 
 
 # FIX #12: Wrap config initialization with helpful error handling
+# FIX CONFIG #4: Show project root in error messages
 try:
     config = Config()
 except ConfigurationError as e:
     # Print error to console before logger is fully set up
     print(f"\n{e}\n")
-    print("To create a config file template, run:")
+    print(f"Project root: {get_project_root()}")
+    print("\nTo create a config file template, run:")
     print("  python -c \"from core.config import Config; print(Config().get_config_template())\" > config.json")
     print("\nOr set environment variables:")
     print("  export DISCORD_BOT_TOKEN='your_token_here'")
@@ -474,4 +503,5 @@ except ConfigurationError as e:
     raise SystemExit(1)
 except Exception as e:
     print(f"\nUnexpected error loading configuration: {e}\n")
+    print(f"Project root: {get_project_root()}")
     raise SystemExit(1)
