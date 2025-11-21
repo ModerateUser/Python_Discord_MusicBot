@@ -38,3 +38,8 @@ class QueueManager(commands.Cog):
         """Show all available commands"""
         embed = create_help_embed(self.bot.user.name)
         await ctx.send(embed=embed)
+
+
+async def setup(bot: commands.Bot):
+    """Setup function for cog loading"""
+    await bot.add_cog(QueueManager(bot))
