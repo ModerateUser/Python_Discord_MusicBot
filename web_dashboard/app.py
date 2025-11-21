@@ -9,12 +9,14 @@ FIXES APPLIED:
 - FIX GUI #4: Add bot integration support
 - FIX GUI #5: Fix LLM service initialization
 - FIX WEBUI #1: Fix config import to handle missing/malformed config gracefully
+- FIX WEBUI #2: Replace deprecated on_event with modern lifespan handler
 """
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 import asyncio
 import logging
 import json
@@ -109,11 +111,93 @@ except ImportError as e:
 
 logger = logging.getLogger('discord_bot')
 
-# Create FastAPI app
+# Global state (will be populated by bot)
+bot_state = {
+    "connected": False,
+    "guilds": [],
+    "queues": {},
+    "status": "offline",
+    "uptime": None,
+    "start_time": None,
+    "version": "1.0.0",
+    "config_error": config_error  # FIX WEBUI #1: Track config errors
+}
+
+# WebSocket connections for real-time updates
+active_connections: List[WebSocket] = []
+
+
+class ConnectionManager:
+    """Manage WebSocket connections"""
+    
+    def __init__(self):
+        self.active_connections: List[WebSocket] = []
+    
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+        logger.info(f"WebSocket connected. Total connections: {len(self.active_connections)}")
+    
+    def disconnect(self, websocket: WebSocket):
+        if websocket in self.active_connections:
+            self.active_connections.remove(websocket)
+            logger.info(f"WebSocket disconnected. Total connections: {len(self.active_connections)}")
+    
+    async def broadcast(self, message: dict):
+        """Broadcast message to all connected clients"""
+        disconnected = []
+        for connection in self.active_connections:
+            try:
+                await connection.send_json(message)
+            except Exception as e:
+                logger.error(f"Error broadcasting to WebSocket: {e}")
+                disconnected.append(connection)
+        
+        # Clean up disconnected clients
+        for conn in disconnected:
+            self.disconnect(conn)
+
+
+manager = ConnectionManager()
+
+
+# FIX WEBUI #2: Modern lifespan event handler (replaces deprecated on_event)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Modern lifespan event handler for FastAPI
+    Replaces deprecated @app.on_event("startup") and @app.on_event("shutdown")
+    """
+    # Startup
+    logger.info("Web Dashboard starting up...")
+    logger.info(f"Templates directory: {templates_dir}")
+    logger.info(f"Static directory: {static_dir}")
+    
+    if config_error:
+        logger.warning(f"Dashboard started with config error: {config_error}")
+    
+    bot_state["start_time"] = datetime.now()
+    bot_state["status"] = "dashboard_online"
+    
+    yield  # Application runs here
+    
+    # Shutdown
+    logger.info("Web Dashboard shutting down...")
+    
+    for connection in manager.active_connections[:]:
+        try:
+            await connection.close()
+        except:
+            pass
+    manager.active_connections.clear()
+
+
+# Create FastAPI app with lifespan handler
 app = FastAPI(
     title="Discord Music Bot Dashboard",
     description="Web-based control panel for Discord Music Bot",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan  # FIX WEBUI #2: Use modern lifespan handler
 )
 
 # CORS middleware
@@ -211,55 +295,6 @@ button:hover {
 }
 """)
     logger.info("Created basic static files")
-
-# Global state (will be populated by bot)
-bot_state = {
-    "connected": False,
-    "guilds": [],
-    "queues": {},
-    "status": "offline",
-    "uptime": None,
-    "start_time": None,
-    "version": "1.0.0",
-    "config_error": config_error  # FIX WEBUI #1: Track config errors
-}
-
-# WebSocket connections for real-time updates
-active_connections: List[WebSocket] = []
-
-
-class ConnectionManager:
-    """Manage WebSocket connections"""
-    
-    def __init__(self):
-        self.active_connections: List[WebSocket] = []
-    
-    async def connect(self, websocket: WebSocket):
-        await websocket.accept()
-        self.active_connections.append(websocket)
-        logger.info(f"WebSocket connected. Total connections: {len(self.active_connections)}")
-    
-    def disconnect(self, websocket: WebSocket):
-        if websocket in self.active_connections:
-            self.active_connections.remove(websocket)
-            logger.info(f"WebSocket disconnected. Total connections: {len(self.active_connections)}")
-    
-    async def broadcast(self, message: dict):
-        """Broadcast message to all connected clients"""
-        disconnected = []
-        for connection in self.active_connections:
-            try:
-                await connection.send_json(message)
-            except Exception as e:
-                logger.error(f"Error broadcasting to WebSocket: {e}")
-                disconnected.append(connection)
-        
-        # Clean up disconnected clients
-        for conn in disconnected:
-            self.disconnect(conn)
-
-
-manager = ConnectionManager()
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -714,33 +749,6 @@ async def health_check():
         "config_loaded": config is not None,
         "config_error": config_error
     })
-
-
-@app.on_event("startup")
-async def startup_event():
-    """Run on application startup"""
-    logger.info("Web Dashboard starting up...")
-    logger.info(f"Templates directory: {templates_dir}")
-    logger.info(f"Static directory: {static_dir}")
-    
-    if config_error:
-        logger.warning(f"Dashboard started with config error: {config_error}")
-    
-    bot_state["start_time"] = datetime.now()
-    bot_state["status"] = "dashboard_online"
-
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    """Run on application shutdown"""
-    logger.info("Web Dashboard shutting down...")
-    
-    for connection in manager.active_connections[:]:
-        try:
-            await connection.close()
-        except:
-            pass
-    manager.active_connections.clear()
 
 
 if __name__ == "__main__":
