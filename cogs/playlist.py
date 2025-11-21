@@ -56,11 +56,11 @@ class Playlist(commands.Cog):
         
         if not action:
             await ctx.send(
-                "❌ Usage: `@bot playlist <create/add/play/list/show/delete> [name] [song]`\n"
+                "❌ Usage: `!playlist <create/add/play/list/show/delete> [name] [song]`\n"
                 "Examples:\n"
-                "  `@bot playlist create MyPlaylist`\n"
-                "  `@bot playlist add MyPlaylist https://youtube.com/...`\n"
-                "  `@bot playlist play MyPlaylist`"
+                "  `!playlist create MyPlaylist`\n"
+                "  `!playlist add MyPlaylist https://youtube.com/...`\n"
+                "  `!playlist play MyPlaylist`"
             )
             return
         
@@ -88,7 +88,7 @@ class Playlist(commands.Cog):
     async def _create_playlist(self, ctx: commands.Context, name: str):
         """Create a new playlist"""
         if not name:
-            await ctx.send("❌ Usage: `@bot playlist create <name>`")
+            await ctx.send("❌ Usage: `!playlist create <name>`")
             return
         
         # Validate name
@@ -110,7 +110,7 @@ class Playlist(commands.Cog):
     async def _add_to_playlist(self, ctx: commands.Context, name: str, query: str):
         """Add a song to a playlist"""
         if not name or not query:
-            await ctx.send("❌ Usage: `@bot playlist add <name> <song url/path>`")
+            await ctx.send("❌ Usage: `!playlist add <name> <song url/path>`")
             return
         
         # Validate name
@@ -125,7 +125,7 @@ class Playlist(commands.Cog):
         
         # Check playlist size limit
         current_playlist = playlist_service.get_playlist(name)
-        max_size = config.get('max_playlist_size', 500)
+        max_size = config.max_playlist_size
         if current_playlist and len(current_playlist) >= max_size:
             await ctx.send(f'❌ Playlist is full! Maximum size: {max_size}')
             return
@@ -166,7 +166,7 @@ class Playlist(commands.Cog):
     async def _play_playlist(self, ctx: commands.Context, name: str):
         """Play a playlist"""
         if not name:
-            await ctx.send("❌ Usage: `@bot playlist play <name>`")
+            await ctx.send("❌ Usage: `!playlist play <name>`")
             return
         
         # Validate name
@@ -205,7 +205,7 @@ class Playlist(commands.Cog):
         queue = music_cog.get_queue(ctx.guild.id)
         
         # Check if adding playlist would exceed queue limit
-        max_queue_size = config.get('max_queue_size', 100)
+        max_queue_size = config.max_queue_size
         if len(queue) + len(playlist) > max_queue_size:
             await ctx.send(
                 f'❌ Adding this playlist would exceed queue limit!\n'
@@ -279,7 +279,7 @@ class Playlist(commands.Cog):
     async def _show_playlist(self, ctx: commands.Context, name: str):
         """Show songs in a playlist"""
         if not name:
-            await ctx.send("❌ Usage: `@bot playlist show <name>`")
+            await ctx.send("❌ Usage: `!playlist show <name>`")
             return
         
         # Validate name
@@ -313,7 +313,7 @@ class Playlist(commands.Cog):
             return
         
         if not name:
-            await ctx.send("❌ Usage: `@bot playlist delete <name>`")
+            await ctx.send("❌ Usage: `!playlist delete <name>`")
             return
         
         # Validate name
