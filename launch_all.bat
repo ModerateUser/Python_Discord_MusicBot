@@ -18,27 +18,51 @@ if errorlevel 1 (
     exit /b 1
 )
 
-REM Check if venv exists
+REM FIX LAUNCH #3: Check if venv exists and is valid
+set "USE_VENV=0"
+if exist "venv\Scripts\python.exe" (
+    echo [INFO] Virtual environment found
+    set "USE_VENV=1"
+) else if exist "venv\" (
+    echo [WARNING] venv folder exists but is incomplete/corrupted
+    echo [INFO] Removing incomplete venv...
+    rmdir /s /q "venv"
+)
+
+REM Create venv if it doesn't exist
 if not exist "venv\" (
-    echo [SETUP] Virtual environment not found. Creating...
+    echo [SETUP] Creating virtual environment...
     python -m venv venv
     if errorlevel 1 (
-        echo [ERROR] Failed to create virtual environment
-        pause
-        exit /b 1
+        echo [WARNING] Failed to create virtual environment
+        echo [INFO] Will run without venv (using system Python)
+        set "USE_VENV=0"
+    ) else (
+        echo [SUCCESS] Virtual environment created
+        set "USE_VENV=1"
     )
-    echo [SUCCESS] Virtual environment created
     echo.
 )
 
-REM Activate virtual environment
-echo [INFO] Activating virtual environment...
-call venv\Scripts\activate.bat
-if errorlevel 1 (
-    echo [ERROR] Failed to activate virtual environment
-    pause
-    exit /b 1
+REM Activate virtual environment if available
+if "%USE_VENV%"=="1" (
+    if exist "venv\Scripts\activate.bat" (
+        echo [INFO] Activating virtual environment...
+        call venv\Scripts\activate.bat
+        if errorlevel 1 (
+            echo [WARNING] Failed to activate venv, using system Python
+            set "USE_VENV=0"
+        )
+    ) else (
+        echo [WARNING] venv\Scripts\activate.bat not found
+        echo [INFO] Using system Python instead
+        set "USE_VENV=0"
+    )
+) else (
+    echo [INFO] Using system Python (no venv)
 )
+
+echo.
 
 REM Check if config.json exists
 if not exist "config.json" (
@@ -53,7 +77,19 @@ if not exist "config.json" (
         echo     "command_prefix": "!",
         echo     "playing": "!help for commands",
         echo     "max_queue_size": 100,
-        echo     "max_playlist_size": 500
+        echo     "max_playlist_size": 500,
+        echo     "allowed_file_extensions": [".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac", ".opus"],
+        echo     "music_directory": null,
+        echo     "llm": {
+        echo         "enabled": false,
+        echo         "provider": "openai",
+        echo         "model": "gpt-3.5-turbo",
+        echo         "api_key": null
+        echo     },
+        echo     "music_synthesis": {
+        echo         "enabled": false,
+        echo         "backend": "disabled"
+        echo     }
         echo }
     ) > config.json
     echo [INFO] Template config.json created. Please edit it with your details.
@@ -71,6 +107,10 @@ if errorlevel 1 (
     pip install -r requirements.txt
     if errorlevel 1 (
         echo [ERROR] Failed to install dependencies
+        echo.
+        echo Try running manually:
+        echo   pip install -r requirements.txt
+        echo.
         pause
         exit /b 1
     )
@@ -94,6 +134,9 @@ if not exist "web_dashboard\static\" (
     mkdir "web_dashboard\static\css"
     mkdir "web_dashboard\static\js"
 )
+if not exist "web_dashboard\templates\" (
+    mkdir "web_dashboard\templates"
+)
 
 echo ========================================
 echo   Starting Discord Music Bot System
@@ -104,16 +147,21 @@ echo [2] Web Dashboard will open in a new window
 echo.
 echo Dashboard URL: http://localhost:8000
 echo API Docs: http://localhost:8000/docs
+echo Health Check: http://localhost:8000/health
 echo.
 echo Press Ctrl+C in either window to stop
 echo ========================================
 echo.
 
-REM Start the web dashboard in a new window
-start "Discord Bot - Web Dashboard" cmd /k "call venv\Scripts\activate.bat && cd web_dashboard && python app.py"
+REM FIX LAUNCH #3: Start dashboard with proper venv handling
+if "%USE_VENV%"=="1" (
+    start "Discord Bot - Web Dashboard" cmd /k "call venv\Scripts\activate.bat && cd web_dashboard && python app.py"
+) else (
+    start "Discord Bot - Web Dashboard" cmd /k "cd web_dashboard && python app.py"
+)
 
 REM Wait a moment for dashboard to start
-timeout /t 2 /nobreak >nul
+timeout /t 3 /nobreak >nul
 
 REM Open browser to dashboard
 start http://localhost:8000
@@ -130,8 +178,11 @@ if errorlevel 1 (
     echo ========================================
     echo [ERROR] Bot stopped with an error
     echo ========================================
+    echo.
+    echo Check logs/bot.log for details
 )
 
 echo.
 echo [INFO] Bot stopped. Dashboard may still be running in the other window.
+echo [INFO] Close the dashboard window to fully stop the system.
 pause
