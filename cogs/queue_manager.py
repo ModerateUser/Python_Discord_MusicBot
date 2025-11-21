@@ -1,5 +1,6 @@
 """
-Queue management commands cog
+Queue management commands cog - FIXED VERSION
+FIX #19: Corrected queue empty check to use proper boolean evaluation
 """
 import discord
 from discord.ext import commands
@@ -18,7 +19,11 @@ class QueueManager(commands.Cog):
     
     @commands.command(name='queue', aliases=['q'])
     async def show_queue(self, ctx):
-        """Show the current queue"""
+        """
+        Show the current queue
+        
+        FIX #19: Use proper boolean check instead of non-existent is_empty()
+        """
         music_cog = self.get_music_cog()
         if not music_cog:
             await ctx.send('❌ Music system not available')
@@ -26,7 +31,11 @@ class QueueManager(commands.Cog):
         
         queue = music_cog.get_queue(ctx.guild.id)
         
-        if queue.is_empty():
+        # FIX #19: MusicQueue implements __bool__() which returns True if:
+        # - Queue has songs (len(self.songs) > 0), OR
+        # - Currently playing (self.current is not None)
+        # So we check: not queue.current AND len(queue) == 0 for truly empty
+        if not queue.current and len(queue) == 0:
             await ctx.send('📭 Queue is empty')
             return
         
