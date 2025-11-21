@@ -121,8 +121,8 @@ class Music(commands.Cog):
         queue = self.get_queue(guild_id)
         
         # Check queue size limit
-        if len(queue) >= config.get('max_queue_size', 100):
-            await ctx.send(f'❌ Queue is full! Maximum size: {config.get("max_queue_size", 100)}')
+        if len(queue) >= config.max_queue_size:
+            await ctx.send(f'❌ Queue is full! Maximum size: {config.max_queue_size}')
             return
         
         # Check if it's a local file
@@ -357,3 +357,8 @@ class Music(commands.Cog):
             await ctx.send(embed=embed)
         else:
             await ctx.send('❌ Nothing is playing')
+
+
+async def setup(bot: commands.Bot):
+    """Setup function for cog"""
+    await bot.add_cog(Music(bot))
