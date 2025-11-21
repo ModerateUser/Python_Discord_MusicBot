@@ -1,6 +1,7 @@
 """
 Advanced AI Music Service
 Handles complex action chaining and intelligent music features
+Integrated with AI music synthesis
 """
 import asyncio
 import logging
@@ -31,6 +32,7 @@ class ActionType(Enum):
     FETCH_LYRICS = "fetch_lyrics"
     MOOD_TRANSITION = "mood_transition"
     SMART_SHUFFLE = "smart_shuffle"
+    SYNTHESIZE_MUSIC = "synthesize_music"  # NEW: AI music synthesis
 
 
 class TriggerType(Enum):
@@ -125,18 +127,21 @@ class AIActionQueue:
 class AdvancedAIMusicService:
     """
     Advanced AI Music Service with complex action chaining and intelligent features
+    Integrated with AI music synthesis capabilities
     """
     
-    def __init__(self, llm_service):
+    def __init__(self, llm_service, synthesis_service=None):
         """
         Initialize the advanced AI music service
         
         Args:
             llm_service: The LLM service instance for AI operations
+            synthesis_service: Optional music synthesis service for AI generation
         """
         self.llm = llm_service
+        self.synthesis = synthesis_service
         self.action_queues: Dict[int, AIActionQueue] = {}  # guild_id -> queue
-        logger.info("Advanced AI Music Service initialized")
+        logger.info(f"Advanced AI Music Service initialized (Synthesis: {synthesis_service is not None})")
     
     def get_queue(self, guild_id: int) -> AIActionQueue:
         """Get or create action queue for a guild"""
@@ -158,12 +163,16 @@ class AdvancedAIMusicService:
         Examples:
             "play jazz for 10 minutes then switch to rock"
             "create a workout playlist with 15 energetic songs"
-            "play something chill, set volume to 30, and loop it"
-            "find songs similar to what's playing and queue them"
+            "synthesize upbeat electronic music based on what I've been listening to"
+            "generate original chill music for studying"
         """
         if not await self.llm.is_available():
             # Fallback to simple parsing
             return await self._simple_parse(query)
+        
+        # Check if synthesis is available for prompt enhancement
+        synthesis_available = self.synthesis and await self.synthesis.is_available()
+        synthesis_note = "\n- synthesize_music: Generate original AI music (params: prompt, style, mood, duration)" if synthesis_available else ""
         
         prompt = f"""Parse this complex music bot command into a sequence of actions.
 
@@ -184,7 +193,7 @@ Action types available:
 - auto_dj: Enable auto-DJ mode (params: mood, energy_level)
 - fetch_lyrics: Get song lyrics
 - mood_transition: Gradually transition moods (params: from_mood, to_mood, duration)
-- smart_shuffle: Intelligent shuffle based on flow
+- smart_shuffle: Intelligent shuffle based on flow{synthesis_note}
 
 Trigger types:
 - immediate: Execute now
@@ -221,7 +230,8 @@ Respond with ONLY valid JSON array:
 Examples:
 "play jazz then rock after 3 songs" → [play jazz (immediate), play rock (after_songs: 3)]
 "create a workout playlist with 10 songs" → [generate_playlist (immediate, count: 10, mood: energetic)]
-"play chill music and set volume to 30" → [play (immediate, mood: chill), volume (immediate, level: 30)]
+"synthesize chill music" → [synthesize_music (immediate, prompt: "chill music", mood: "relaxed")]
+"generate original upbeat music based on my history" → [synthesize_music (immediate, prompt: "upbeat music", use_history: true)]
 """
         
         try:
@@ -257,8 +267,76 @@ Examples:
                 parameters={'query': query},
                 description=f"Play: {query}"
             ))
+        elif any(word in query.lower() for word in ['synthesize', 'generate', 'create music', 'compose']):
+            # Simple synthesis detection
+            actions.append(Action(
+                action_type=ActionType.SYNTHESIZE_MUSIC,
+                parameters={'prompt': query},
+                description=f"Synthesize: {query}"
+            ))
         
         return actions
+    
+    async def synthesize_music(
+        self,
+        prompt: str,
+        guild_id: int,
+        style: Optional[str] = None,
+        mood: Optional[str] = None,
+        duration: int = 30,
+        use_history: bool = True
+    ) -> Optional[str]:
+        """
+        Synthesize original music using AI
+        
+        Args:
+            prompt: Description of music to generate
+            guild_id: Discord guild ID for history context
+            style: Optional music style
+            mood: Optional mood
+            duration: Duration in seconds
+            use_history: Whether to use listening history for personalization
+            
+        Returns:
+            Path to generated audio file or None
+        """
+        if not self.synthesis or not await self.synthesis.is_available():
+            logger.warning("Music synthesis not available")
+            return None
+        
+        try:
+            from .music_synthesis_service import MusicGenerationRequest, GenerationQuality
+            
+            # Get listening history if requested
+            listening_history = None
+            if use_history:
+                queue = self.get_queue(guild_id)
+                listening_history = queue.listening_history
+            
+            # Create synthesis request
+            request = MusicGenerationRequest(
+                prompt=prompt,
+                style=style,
+                mood=mood,
+                duration=duration,
+                quality=GenerationQuality.MEDIUM,
+                guild_id=guild_id
+            )
+            
+            # Generate music
+            logger.info(f"Synthesizing music: {prompt} (style: {style}, mood: {mood})")
+            result = await self.synthesis.generate_music(request, listening_history)
+            
+            if result:
+                logger.info(f"Successfully synthesized: {result.title} ({result.generation_time:.2f}s)")
+                return result.file_path
+            else:
+                logger.error("Music synthesis failed")
+                return None
+        
+        except Exception as e:
+            logger.error(f"Error synthesizing music: {e}", exc_info=True)
+            return None
     
     async def generate_mood_playlist(
         self,
@@ -646,16 +724,17 @@ Respond with ONLY valid JSON array:
 advanced_ai_service: Optional[AdvancedAIMusicService] = None
 
 
-def create_advanced_ai_service(llm_service) -> AdvancedAIMusicService:
+def create_advanced_ai_service(llm_service, synthesis_service=None) -> AdvancedAIMusicService:
     """
     Factory function to create advanced AI music service
     
     Args:
         llm_service: LLM service instance
+        synthesis_service: Optional music synthesis service
         
     Returns:
         AdvancedAIMusicService instance
     """
     global advanced_ai_service
-    advanced_ai_service = AdvancedAIMusicService(llm_service)
+    advanced_ai_service = AdvancedAIMusicService(llm_service, synthesis_service)
     return advanced_ai_service
