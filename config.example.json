@@ -1,0 +1,10 @@
+{
+    "token": "YOUR_BOT_TOKEN_HERE",
+    "owner_id": 123456789012345678,
+    "playing": "!help for commands",
+    "command_prefix": "!",
+    "max_queue_size": 100,
+    "max_playlist_size": 500,
+    "allowed_file_extensions": [".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac", ".opus"],
+    "music_directory": null
+}
