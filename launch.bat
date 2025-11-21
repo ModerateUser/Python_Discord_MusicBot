@@ -16,28 +16,6 @@ if errorlevel 1 (
     exit /b 1
 )
 
-REM Check if venv exists
-if not exist "venv\" (
-    echo [SETUP] Virtual environment not found. Creating...
-    python -m venv venv
-    if errorlevel 1 (
-        echo [ERROR] Failed to create virtual environment
-        pause
-        exit /b 1
-    )
-    echo [SUCCESS] Virtual environment created
-    echo.
-)
-
-REM Activate virtual environment
-echo [INFO] Activating virtual environment...
-call venv\Scripts\activate.bat
-if errorlevel 1 (
-    echo [ERROR] Failed to activate virtual environment
-    pause
-    exit /b 1
-)
-
 REM Check if config.json exists
 if not exist "config.json" (
     echo [WARNING] config.json not found!
@@ -48,7 +26,22 @@ if not exist "config.json" (
         echo {
         echo     "token": "YOUR_BOT_TOKEN_HERE",
         echo     "owner_id": "YOUR_DISCORD_USER_ID_HERE",
-        echo     "playing": "!help for commands"
+        echo     "command_prefix": "!",
+        echo     "playing": "!help for commands",
+        echo     "max_queue_size": 100,
+        echo     "max_playlist_size": 500,
+        echo     "allowed_file_extensions": [".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac", ".opus"],
+        echo     "music_directory": null,
+        echo     "llm": {
+        echo         "enabled": false,
+        echo         "provider": "openai",
+        echo         "model": "gpt-3.5-turbo",
+        echo         "api_key": null
+        echo     },
+        echo     "music_synthesis": {
+        echo         "enabled": false,
+        echo         "backend": "disabled"
+        echo     }
         echo }
     ) > config.json
     echo [INFO] Template config.json created. Please edit it with your details.
@@ -56,6 +49,52 @@ if not exist "config.json" (
     pause
     exit /b 1
 )
+
+REM FIX LAUNCH #1: Check if venv exists and is valid
+set "USE_VENV=0"
+if exist "venv\Scripts\python.exe" (
+    echo [INFO] Virtual environment found
+    set "USE_VENV=1"
+) else if exist "venv\" (
+    echo [WARNING] venv folder exists but is incomplete/corrupted
+    echo [INFO] Removing incomplete venv...
+    rmdir /s /q "venv"
+)
+
+REM Create venv if it doesn't exist
+if not exist "venv\" (
+    echo [SETUP] Creating virtual environment...
+    python -m venv venv
+    if errorlevel 1 (
+        echo [WARNING] Failed to create virtual environment
+        echo [INFO] Will run without venv (using system Python)
+        set "USE_VENV=0"
+    ) else (
+        echo [SUCCESS] Virtual environment created
+        set "USE_VENV=1"
+    )
+    echo.
+)
+
+REM Activate virtual environment if available
+if "%USE_VENV%"=="1" (
+    if exist "venv\Scripts\activate.bat" (
+        echo [INFO] Activating virtual environment...
+        call venv\Scripts\activate.bat
+        if errorlevel 1 (
+            echo [WARNING] Failed to activate venv, using system Python
+            set "USE_VENV=0"
+        )
+    ) else (
+        echo [WARNING] venv\Scripts\activate.bat not found
+        echo [INFO] Using system Python instead
+        set "USE_VENV=0"
+    )
+) else (
+    echo [INFO] Using system Python (no venv)
+)
+
+echo.
 
 REM Check if requirements are installed
 echo [INFO] Checking dependencies...
@@ -66,6 +105,10 @@ if errorlevel 1 (
     pip install -r requirements.txt
     if errorlevel 1 (
         echo [ERROR] Failed to install dependencies
+        echo.
+        echo Try running manually:
+        echo   pip install -r requirements.txt
+        echo.
         pause
         exit /b 1
     )
@@ -85,6 +128,9 @@ if errorlevel 1 (
     echo.
 )
 
+REM Create logs directory if it doesn't exist
+if not exist "logs\" mkdir logs
+
 REM Run the bot
 echo [INFO] Starting Discord Music Bot...
 echo ========================================
@@ -97,6 +143,8 @@ if errorlevel 1 (
     echo ========================================
     echo [ERROR] Bot stopped with an error
     echo ========================================
+    echo.
+    echo Check logs/bot.log for details
 )
 
 echo.
