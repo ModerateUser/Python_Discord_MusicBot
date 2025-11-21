@@ -1,531 +1,410 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Logs - {{ bot_name }}</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+{% extends "base.html" %}
+
+{% block title %}Logs - {{ bot_name }}{% endblock %}
+
+{% block extra_styles %}
+<style>
+    /* Log-specific styles */
+    .log-container {
+        background: #1e1e1e;
+        border-radius: 0.5rem;
+        padding: 1rem;
+        min-height: 600px;
+        max-height: 800px;
+        overflow-y: auto;
+        font-family: 'Courier New', monospace;
+        font-size: 13px;
+        line-height: 1.6;
+    }
+
+    .log-line {
+        padding: 4px 0;
+        border-bottom: 1px solid #2a2a2a;
+        color: #d4d4d4;
+    }
+
+    .log-line:hover {
+        background: #2a2a2a;
+    }
+
+    .log-timestamp {
+        color: #858585;
+        margin-right: 10px;
+    }
+
+    .log-level {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 3px;
+        font-weight: bold;
+        margin-right: 10px;
+        font-size: 11px;
+    }
+
+    .log-level-DEBUG {
+        background: #3b82f6;
+        color: white;
+    }
+
+    .log-level-INFO {
+        background: #10b981;
+        color: white;
+    }
+
+    .log-level-WARNING {
+        background: #f59e0b;
+        color: white;
+    }
+
+    .log-level-ERROR {
+        background: #ef4444;
+        color: white;
+    }
+
+    .log-level-CRITICAL {
+        background: #dc2626;
+        color: white;
+        animation: pulse-critical 1s infinite;
+    }
+
+    @keyframes pulse-critical {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.7; }
+    }
+
+    .log-message {
+        color: #d4d4d4;
+    }
+
+    .filter-active {
+        background: #10b981 !important;
+        border-color: #10b981 !important;
+    }
+
+    .auto-scroll-indicator {
+        position: fixed;
+        bottom: 30px;
+        right: 30px;
+        background: #a855f7;
+        color: white;
+        padding: 10px 20px;
+        border-radius: 25px;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        font-size: 14px;
+        font-weight: 600;
+        display: none;
+        z-index: 1000;
+    }
+
+    .auto-scroll-indicator.active {
+        display: block;
+        animation: slide-in 0.3s ease-out;
+    }
+
+    @keyframes slide-in {
+        from {
+            transform: translateX(100%);
+            opacity: 0;
         }
-
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 20px;
+        to {
+            transform: translateX(0);
+            opacity: 1;
         }
+    }
+</style>
+{% endblock %}
 
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-        }
-
-        .header {
-            background: white;
-            padding: 20px 30px;
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .header h1 {
-            color: #667eea;
-            font-size: 28px;
-        }
-
-        .nav-links {
-            display: flex;
-            gap: 15px;
-        }
-
-        .nav-links a {
-            color: #667eea;
-            text-decoration: none;
-            padding: 8px 16px;
-            border-radius: 5px;
-            transition: background 0.3s;
-        }
-
-        .nav-links a:hover {
-            background: #f0f0f0;
-        }
-
-        .controls {
-            background: white;
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
-            display: flex;
-            gap: 15px;
-            align-items: center;
-            flex-wrap: wrap;
-        }
-
-        .controls label {
-            font-weight: 600;
-            color: #555;
-        }
-
-        .controls select,
-        .controls input {
-            padding: 8px 12px;
-            border: 2px solid #e0e0e0;
-            border-radius: 5px;
-            font-size: 14px;
-        }
-
-        .controls select:focus,
-        .controls input:focus {
-            outline: none;
-            border-color: #667eea;
-        }
-
-        .btn {
-            background: #667eea;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 14px;
-            font-weight: 600;
-            transition: background 0.3s;
-        }
-
-        .btn:hover {
-            background: #5568d3;
-        }
-
-        .btn-secondary {
-            background: #6b7280;
-        }
-
-        .btn-secondary:hover {
-            background: #4b5563;
-        }
-
-        .btn-danger {
-            background: #ef4444;
-        }
-
-        .btn-danger:hover {
-            background: #dc2626;
-        }
-
-        .log-container {
-            background: #1e1e1e;
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            min-height: 600px;
-            max-height: 800px;
-            overflow-y: auto;
-            font-family: 'Courier New', monospace;
-            font-size: 13px;
-            line-height: 1.6;
-        }
-
-        .log-line {
-            padding: 4px 0;
-            border-bottom: 1px solid #2a2a2a;
-            color: #d4d4d4;
-        }
-
-        .log-line:hover {
-            background: #2a2a2a;
-        }
-
-        .log-timestamp {
-            color: #858585;
-            margin-right: 10px;
-        }
-
-        .log-level {
-            display: inline-block;
-            padding: 2px 8px;
-            border-radius: 3px;
-            font-weight: bold;
-            margin-right: 10px;
-            font-size: 11px;
-        }
-
-        .log-level-DEBUG {
-            background: #3b82f6;
-            color: white;
-        }
-
-        .log-level-INFO {
-            background: #10b981;
-            color: white;
-        }
-
-        .log-level-WARNING {
-            background: #f59e0b;
-            color: white;
-        }
-
-        .log-level-ERROR {
-            background: #ef4444;
-            color: white;
-        }
-
-        .log-level-CRITICAL {
-            background: #dc2626;
-            color: white;
-            animation: pulse 1s infinite;
-        }
-
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.7; }
-        }
-
-        .log-message {
-            color: #d4d4d4;
-        }
-
-        .loading {
-            text-align: center;
-            padding: 40px;
-            color: #858585;
-        }
-
-        .stats {
-            background: white;
-            padding: 15px 20px;
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .stat-item {
-            text-align: center;
-        }
-
-        .stat-value {
-            font-size: 24px;
-            font-weight: bold;
-            color: #667eea;
-        }
-
-        .stat-label {
-            font-size: 12px;
-            color: #888;
-            text-transform: uppercase;
-        }
-
-        .filter-active {
-            background: #10b981 !important;
-        }
-
-        .auto-scroll-indicator {
-            position: fixed;
-            bottom: 30px;
-            right: 30px;
-            background: #667eea;
-            color: white;
-            padding: 10px 20px;
-            border-radius: 25px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
-            font-size: 14px;
-            font-weight: 600;
-            display: none;
-        }
-
-        .auto-scroll-indicator.active {
-            display: block;
-        }
-
-        @media (max-width: 768px) {
-            .header {
-                flex-direction: column;
-                gap: 15px;
-            }
-
-            .nav-links {
-                flex-direction: column;
-                width: 100%;
-            }
-
-            .nav-links a {
-                text-align: center;
-            }
-
-            .controls {
-                flex-direction: column;
-                align-items: stretch;
-            }
-
-            .stats {
-                flex-direction: column;
-                gap: 15px;
-            }
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>📋 {{ bot_name }} Logs</h1>
-            <div class="nav-links">
-                <a href="/">Dashboard</a>
-                <a href="/config">Configuration</a>
-                <a href="/api/docs">API Docs</a>
-            </div>
+{% block content %}
+<!-- Stats Cards -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+    <div class="bg-gray-800 rounded-lg shadow-lg p-6">
+        <div class="text-center">
+            <div class="text-3xl font-bold text-purple-500" id="total-lines">0</div>
+            <div class="text-sm text-gray-400 uppercase mt-1">Total Lines</div>
         </div>
-
-        <div class="stats">
-            <div class="stat-item">
-                <div class="stat-value" id="total-lines">0</div>
-                <div class="stat-label">Total Lines</div>
-            </div>
-            <div class="stat-item">
-                <div class="stat-value" id="error-count">0</div>
-                <div class="stat-label">Errors</div>
-            </div>
-            <div class="stat-item">
-                <div class="stat-value" id="warning-count">0</div>
-                <div class="stat-label">Warnings</div>
-            </div>
-            <div class="stat-item">
-                <div class="stat-value" id="last-update">Never</div>
-                <div class="stat-label">Last Update</div>
-            </div>
+    </div>
+    <div class="bg-gray-800 rounded-lg shadow-lg p-6">
+        <div class="text-center">
+            <div class="text-3xl font-bold text-red-500" id="error-count">0</div>
+            <div class="text-sm text-gray-400 uppercase mt-1">Errors</div>
         </div>
+    </div>
+    <div class="bg-gray-800 rounded-lg shadow-lg p-6">
+        <div class="text-center">
+            <div class="text-3xl font-bold text-yellow-500" id="warning-count">0</div>
+            <div class="text-sm text-gray-400 uppercase mt-1">Warnings</div>
+        </div>
+    </div>
+    <div class="bg-gray-800 rounded-lg shadow-lg p-6">
+        <div class="text-center">
+            <div class="text-lg font-bold text-gray-300" id="last-update">Never</div>
+            <div class="text-sm text-gray-400 uppercase mt-1">Last Update</div>
+        </div>
+    </div>
+</div>
 
-        <div class="controls">
-            <label for="lines-select">Lines:</label>
-            <select id="lines-select">
+<!-- Controls -->
+<div class="bg-gray-800 rounded-lg shadow-lg p-4 mb-6">
+    <div class="flex flex-wrap items-center gap-4">
+        <div class="flex items-center space-x-2">
+            <label for="lines-select" class="text-sm font-semibold text-gray-400">Lines:</label>
+            <select id="lines-select" class="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:border-purple-500">
                 <option value="50">50</option>
                 <option value="100" selected>100</option>
                 <option value="200">200</option>
                 <option value="500">500</option>
                 <option value="1000">1000</option>
             </select>
+        </div>
 
-            <label for="filter-input">Filter:</label>
-            <input type="text" id="filter-input" placeholder="Search logs...">
+        <div class="flex items-center space-x-2 flex-1">
+            <label for="filter-input" class="text-sm font-semibold text-gray-400">Filter:</label>
+            <input type="text" id="filter-input" placeholder="Search logs..." 
+                class="flex-1 px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm focus:outline-none focus:border-purple-500">
+        </div>
 
-            <button class="btn" id="filter-debug">DEBUG</button>
-            <button class="btn" id="filter-info">INFO</button>
-            <button class="btn" id="filter-warning">WARNING</button>
-            <button class="btn" id="filter-error">ERROR</button>
-
-            <button class="btn btn-secondary" onclick="refreshLogs()">🔄 Refresh</button>
-            <button class="btn btn-secondary" onclick="toggleAutoScroll()">
-                <span id="auto-scroll-text">📌 Auto-scroll: ON</span>
+        <div class="flex items-center space-x-2">
+            <button class="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm font-semibold transition-colors" id="filter-debug">
+                DEBUG
             </button>
-            <button class="btn btn-danger" onclick="clearDisplay()">🗑️ Clear Display</button>
+            <button class="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm font-semibold transition-colors" id="filter-info">
+                INFO
+            </button>
+            <button class="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm font-semibold transition-colors" id="filter-warning">
+                WARNING
+            </button>
+            <button class="px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm font-semibold transition-colors" id="filter-error">
+                ERROR
+            </button>
         </div>
 
-        <div class="log-container" id="log-container">
-            <div class="loading">Loading logs...</div>
-        </div>
-
-        <div class="auto-scroll-indicator" id="auto-scroll-indicator">
-            🔄 Auto-scrolling enabled
+        <div class="flex items-center space-x-2">
+            <button onclick="refreshLogs()" class="btn-secondary text-sm">
+                <i class="fas fa-sync-alt mr-1"></i>Refresh
+            </button>
+            <button onclick="toggleAutoScroll()" class="btn-secondary text-sm">
+                <i class="fas fa-thumbtack mr-1"></i><span id="auto-scroll-text">Auto-scroll: ON</span>
+            </button>
+            <button onclick="clearDisplay()" class="btn-danger text-sm">
+                <i class="fas fa-trash mr-1"></i>Clear
+            </button>
         </div>
     </div>
+</div>
 
-    <script>
-        let autoScroll = true;
-        let activeFilters = new Set();
-        let allLogs = [];
-        let refreshInterval = null;
+<!-- Log Container -->
+<div class="bg-gray-800 rounded-lg shadow-lg p-6">
+    <div class="log-container" id="log-container">
+        <div class="text-center text-gray-400 py-10">
+            <div class="spinner mx-auto mb-4"></div>
+            <p>Loading logs...</p>
+        </div>
+    </div>
+</div>
 
-        async function loadLogs() {
-            try {
-                const lines = document.getElementById('lines-select').value;
-                const response = await fetch(`/api/logs?lines=${lines}`);
-                const data = await response.json();
+<!-- Auto-scroll Indicator -->
+<div class="auto-scroll-indicator" id="auto-scroll-indicator">
+    <i class="fas fa-sync-alt mr-2"></i>Auto-scrolling enabled
+</div>
+{% endblock %}
 
-                allLogs = data.logs || [];
-                
-                // Update stats
-                document.getElementById('total-lines').textContent = data.total || 0;
-                document.getElementById('last-update').textContent = new Date().toLocaleTimeString();
+{% block extra_scripts %}
+<script>
+    let autoScroll = true;
+    let activeFilters = new Set();
+    let allLogs = [];
+    let refreshInterval = null;
 
-                // Count errors and warnings
-                let errorCount = 0;
-                let warningCount = 0;
-                allLogs.forEach(line => {
-                    if (line.includes('ERROR') || line.includes('CRITICAL')) errorCount++;
-                    if (line.includes('WARNING')) warningCount++;
-                });
-                document.getElementById('error-count').textContent = errorCount;
-                document.getElementById('warning-count').textContent = warningCount;
+    async function loadLogs() {
+        try {
+            const lines = document.getElementById('lines-select').value;
+            const response = await fetch(`/api/logs?lines=${lines}`);
+            const data = await response.json();
 
-                displayLogs();
+            allLogs = data.logs || [];
+            
+            // Update stats
+            document.getElementById('total-lines').textContent = data.total || 0;
+            document.getElementById('last-update').textContent = new Date().toLocaleTimeString();
 
-            } catch (error) {
-                console.error('Error loading logs:', error);
-                document.getElementById('log-container').innerHTML = `
-                    <div class="loading" style="color: #ef4444;">
-                        ❌ Error loading logs: ${error.message}
-                        <br><br>
-                        <button class="btn" onclick="refreshLogs()">Try Again</button>
-                    </div>
-                `;
-            }
+            // Count errors and warnings
+            let errorCount = 0;
+            let warningCount = 0;
+            allLogs.forEach(line => {
+                if (line.includes('ERROR') || line.includes('CRITICAL')) errorCount++;
+                if (line.includes('WARNING')) warningCount++;
+            });
+            document.getElementById('error-count').textContent = errorCount;
+            document.getElementById('warning-count').textContent = warningCount;
+
+            displayLogs();
+
+        } catch (error) {
+            console.error('Error loading logs:', error);
+            document.getElementById('log-container').innerHTML = `
+                <div class="text-center text-red-400 py-10">
+                    <i class="fas fa-exclamation-triangle text-5xl mb-4"></i>
+                    <h3 class="text-xl font-bold mb-2">Error Loading Logs</h3>
+                    <p class="text-gray-400 mb-4">${error.message}</p>
+                    <button onclick="refreshLogs()" class="btn-primary">
+                        <i class="fas fa-redo mr-2"></i>Try Again
+                    </button>
+                </div>
+            `;
+        }
+    }
+
+    function displayLogs() {
+        const container = document.getElementById('log-container');
+        const filterText = document.getElementById('filter-input').value.toLowerCase();
+        
+        // Filter logs
+        let filteredLogs = allLogs;
+        
+        // Apply text filter
+        if (filterText) {
+            filteredLogs = filteredLogs.filter(line => 
+                line.toLowerCase().includes(filterText)
+            );
         }
 
-        function displayLogs() {
-            const container = document.getElementById('log-container');
-            const filterText = document.getElementById('filter-input').value.toLowerCase();
-            
-            // Filter logs
-            let filteredLogs = allLogs;
-            
-            // Apply text filter
-            if (filterText) {
-                filteredLogs = filteredLogs.filter(line => 
-                    line.toLowerCase().includes(filterText)
+        // Apply level filters
+        if (activeFilters.size > 0) {
+            filteredLogs = filteredLogs.filter(line => {
+                return Array.from(activeFilters).some(level => 
+                    line.includes(level)
                 );
-            }
-
-            // Apply level filters
-            if (activeFilters.size > 0) {
-                filteredLogs = filteredLogs.filter(line => {
-                    return Array.from(activeFilters).some(level => 
-                        line.includes(level)
-                    );
-                });
-            }
-
-            // Display logs
-            if (filteredLogs.length === 0) {
-                container.innerHTML = '<div class="loading">No logs match the current filters</div>';
-                return;
-            }
-
-            const wasAtBottom = container.scrollHeight - container.scrollTop === container.clientHeight;
-
-            container.innerHTML = filteredLogs.map(line => {
-                const logLine = parseLo(line);
-                return `<div class="log-line">${logLine}</div>`;
-            }).join('');
-
-            // Auto-scroll if enabled and was at bottom
-            if (autoScroll && wasAtBottom) {
-                container.scrollTop = container.scrollHeight;
-            }
+            });
         }
 
-        function parseLogLine(line) {
-            // Try to parse log line format: TIMESTAMP - LEVEL - MESSAGE
-            const match = line.match(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),\d+ - (\w+) - (.+)$/);
-            
-            if (match) {
-                const [, timestamp, level, message] = match;
-                return `
-                    <span class="log-timestamp">${timestamp}</span>
-                    <span class="log-level log-level-${level}">${level}</span>
-                    <span class="log-message">${escapeHtml(message)}</span>
-                `;
-            }
+        // Display logs
+        if (filteredLogs.length === 0) {
+            container.innerHTML = '<div class="text-center text-gray-400 py-10">No logs match the current filters</div>';
+            return;
+        }
 
-            // Fallback for non-standard format
-            let level = 'INFO';
-            if (line.includes('ERROR') || line.includes('CRITICAL')) level = 'ERROR';
-            else if (line.includes('WARNING')) level = 'WARNING';
-            else if (line.includes('DEBUG')) level = 'DEBUG';
+        const wasAtBottom = container.scrollHeight - container.scrollTop === container.clientHeight;
 
+        container.innerHTML = filteredLogs.map(line => {
+            const logLine = parseLogLine(line);
+            return `<div class="log-line">${logLine}</div>`;
+        }).join('');
+
+        // Auto-scroll if enabled and was at bottom
+        if (autoScroll && wasAtBottom) {
+            container.scrollTop = container.scrollHeight;
+        }
+    }
+
+    function parseLogLine(line) {
+        // Try to parse log line format: TIMESTAMP - LEVEL - MESSAGE
+        const match = line.match(/^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}),\d+ - (\w+) - (.+)$/);
+        
+        if (match) {
+            const [, timestamp, level, message] = match;
             return `
+                <span class="log-timestamp">${timestamp}</span>
                 <span class="log-level log-level-${level}">${level}</span>
-                <span class="log-message">${escapeHtml(line)}</span>
+                <span class="log-message">${escapeHtml(message)}</span>
             `;
         }
 
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
+        // Fallback for non-standard format
+        let level = 'INFO';
+        if (line.includes('ERROR') || line.includes('CRITICAL')) level = 'ERROR';
+        else if (line.includes('WARNING')) level = 'WARNING';
+        else if (line.includes('DEBUG')) level = 'DEBUG';
+
+        return `
+            <span class="log-level log-level-${level}">${level}</span>
+            <span class="log-message">${escapeHtml(line)}</span>
+        `;
+    }
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    function refreshLogs() {
+        loadLogs();
+    }
+
+    function toggleAutoScroll() {
+        autoScroll = !autoScroll;
+        const indicator = document.getElementById('auto-scroll-indicator');
+        const text = document.getElementById('auto-scroll-text');
+        
+        if (autoScroll) {
+            text.textContent = 'Auto-scroll: ON';
+            indicator.classList.add('active');
+            setTimeout(() => indicator.classList.remove('active'), 2000);
+        } else {
+            text.textContent = 'Auto-scroll: OFF';
+            indicator.classList.remove('active');
         }
+    }
 
-        function refreshLogs() {
-            loadLogs();
+    function clearDisplay() {
+        if (confirm('Clear the log display? (This will not delete the actual log file)')) {
+            document.getElementById('log-container').innerHTML = '<div class="text-center text-gray-400 py-10">Display cleared. Click Refresh to reload logs.</div>';
+            allLogs = [];
+            document.getElementById('total-lines').textContent = '0';
+            document.getElementById('error-count').textContent = '0';
+            document.getElementById('warning-count').textContent = '0';
         }
+    }
 
-        function toggleAutoScroll() {
-            autoScroll = !autoScroll;
-            const indicator = document.getElementById('auto-scroll-indicator');
-            const text = document.getElementById('auto-scroll-text');
-            
-            if (autoScroll) {
-                text.textContent = '📌 Auto-scroll: ON';
-                indicator.classList.add('active');
-                setTimeout(() => indicator.classList.remove('active'), 2000);
-            } else {
-                text.textContent = '📌 Auto-scroll: OFF';
-                indicator.classList.remove('active');
-            }
+    function toggleFilter(level) {
+        if (activeFilters.has(level)) {
+            activeFilters.delete(level);
+        } else {
+            activeFilters.add(level);
         }
+        
+        // Update button appearance
+        const button = document.getElementById(`filter-${level.toLowerCase()}`);
+        button.classList.toggle('filter-active');
+        
+        displayLogs();
+    }
 
-        function clearDisplay() {
-            if (confirm('Clear the log display? (This will not delete the actual log file)')) {
-                document.getElementById('log-container').innerHTML = '<div class="loading">Display cleared. Click Refresh to reload logs.</div>';
-                allLogs = [];
-            }
+    // Event listeners
+    document.getElementById('lines-select').addEventListener('change', refreshLogs);
+    document.getElementById('filter-input').addEventListener('input', displayLogs);
+    document.getElementById('filter-debug').addEventListener('click', () => toggleFilter('DEBUG'));
+    document.getElementById('filter-info').addEventListener('click', () => toggleFilter('INFO'));
+    document.getElementById('filter-warning').addEventListener('click', () => toggleFilter('WARNING'));
+    document.getElementById('filter-error').addEventListener('click', () => toggleFilter('ERROR'));
+
+    // Detect manual scroll
+    document.getElementById('log-container').addEventListener('scroll', function() {
+        const isAtBottom = Math.abs(this.scrollHeight - this.scrollTop - this.clientHeight) < 5;
+        const indicator = document.getElementById('auto-scroll-indicator');
+        
+        if (!isAtBottom && autoScroll) {
+            // User scrolled up, show indicator
+            indicator.innerHTML = '<i class="fas fa-arrow-down mr-2"></i>Scroll to bottom to re-enable auto-scroll';
+            indicator.classList.add('active');
+        } else if (isAtBottom && autoScroll) {
+            indicator.classList.remove('active');
         }
+    });
 
-        function toggleFilter(level) {
-            if (activeFilters.has(level)) {
-                activeFilters.delete(level);
-            } else {
-                activeFilters.add(level);
-            }
-            
-            // Update button appearance
-            const button = document.getElementById(`filter-${level.toLowerCase()}`);
-            button.classList.toggle('filter-active');
-            
-            displayLogs();
-        }
-
-        // Event listeners
-        document.getElementById('lines-select').addEventListener('change', refreshLogs);
-        document.getElementById('filter-input').addEventListener('input', displayLogs);
-        document.getElementById('filter-debug').addEventListener('click', () => toggleFilter('DEBUG'));
-        document.getElementById('filter-info').addEventListener('click', () => toggleFilter('INFO'));
-        document.getElementById('filter-warning').addEventListener('click', () => toggleFilter('WARNING'));
-        document.getElementById('filter-error').addEventListener('click', () => toggleFilter('ERROR'));
-
+    // Initialize
+    document.addEventListener('DOMContentLoaded', () => {
+        loadLogs();
+        
         // Auto-refresh every 5 seconds
         refreshInterval = setInterval(refreshLogs, 5000);
+    });
 
-        // Load logs on page load
-        window.addEventListener('DOMContentLoaded', loadLogs);
-
-        // Cleanup on page unload
-        window.addEventListener('beforeunload', () => {
-            if (refreshInterval) {
-                clearInterval(refreshInterval);
-            }
-        });
-
-        // Detect manual scroll
-        document.getElementById('log-container').addEventListener('scroll', function() {
-            const isAtBottom = this.scrollHeight - this.scrollTop === this.clientHeight;
-            if (!isAtBottom && autoScroll) {
-                // User scrolled up, disable auto-scroll temporarily
-                const indicator = document.getElementById('auto-scroll-indicator');
-                indicator.textContent = '⬆️ Scroll to bottom to re-enable auto-scroll';
-                indicator.classList.add('active');
-            } else if (isAtBottom && autoScroll) {
-                const indicator = document.getElementById('auto-scroll-indicator');
-                indicator.classList.remove('active');
-            }
-        });
-    </script>
-</body>
-</html>
+    // Cleanup on page unload
+    window.addEventListener('beforeunload', () => {
+        if (refreshInterval) {
+            clearInterval(refreshInterval);
+        }
+    });
+</script>
+{% endblock %}
