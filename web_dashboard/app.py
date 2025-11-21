@@ -11,6 +11,8 @@ FIXES APPLIED:
 - FIX WEBUI #1: Fix config import to handle missing/malformed config gracefully
 - FIX WEBUI #2: Replace deprecated on_event with modern lifespan handler
 - FIX WEBUI #5: Integrate with dashboard bridge for real-time bot data
+- FIX BACKEND #1: Add template context helper function
+- FIX BACKEND #2: Add missing API endpoints for dashboard integration
 """
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
@@ -393,18 +395,32 @@ button:hover {
     logger.info("Created basic static files")
 
 
+# ============================================================================
+# FIX BACKEND #1: TEMPLATE CONTEXT HELPER
+# ============================================================================
+
+def get_template_context(request: Request, **kwargs):
+    """Get standard template context for all pages"""
+    return {
+        "request": request,
+        "bot_name": "Discord Music Bot",
+        "version": bot_state.get("version", "1.0.0"),
+        "config_error": config_error,
+        "bridge_connected": bot_state.get("bridge_connected", False),
+        **kwargs
+    }
+
+
+# ============================================================================
+# TEMPLATE RENDERING ROUTES (Updated to use helper)
+# ============================================================================
+
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
     """Main dashboard page"""
     try:
-        return templates.TemplateResponse("dashboard.html", {
-            "request": request,
-            "bot_name": "Discord Music Bot",
-            "version": bot_state.get("version", "1.0.0"),
-            "status": bot_state.get("status", "offline"),
-            "config_error": config_error,  # FIX WEBUI #1: Pass config error to template
-            "bridge_connected": bot_state.get("bridge_connected", False)  # FIX WEBUI #5
-        })
+        return templates.TemplateResponse("dashboard.html", 
+            get_template_context(request, status=bot_state.get("status", "offline")))
     except Exception as e:
         logger.error(f"Error rendering dashboard: {e}")
         return HTMLResponse(
@@ -490,11 +506,8 @@ async def dashboard(request: Request):
 async def config_page(request: Request):
     """Configuration page"""
     try:
-        return templates.TemplateResponse("config.html", {
-            "request": request,
-            "bot_name": "Discord Music Bot",
-            "config_error": config_error
-        })
+        return templates.TemplateResponse("config.html", 
+            get_template_context(request))
     except Exception as e:
         logger.error(f"Error rendering config page: {e}")
         return HTMLResponse(
@@ -539,10 +552,8 @@ async def config_page(request: Request):
 async def logs_page(request: Request):
     """Logs viewer page"""
     try:
-        return templates.TemplateResponse("logs.html", {
-            "request": request,
-            "bot_name": "Discord Music Bot"
-        })
+        return templates.TemplateResponse("logs.html", 
+            get_template_context(request))
     except Exception as e:
         logger.error(f"Error rendering logs page: {e}")
         return HTMLResponse(
@@ -560,6 +571,10 @@ async def logs_page(request: Request):
             status_code=200
         )
 
+
+# ============================================================================
+# EXISTING API ENDPOINTS
+# ============================================================================
 
 @app.get("/api/status")
 async def get_status():
@@ -775,6 +790,134 @@ async def get_logs(lines: int = 100):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ============================================================================
+# FIX BACKEND #2: NEW API ENDPOINTS - Dashboard Integration
+# ============================================================================
+
+@app.post("/api/guild/{guild_id}/command")
+async def execute_guild_command(guild_id: int, command: str, params: dict = None):
+    """
+    Execute music command from dashboard
+    
+    Commands:
+    - pause: Pause current track
+    - resume: Resume paused track
+    - skip: Skip current track
+    - stop: Stop playback and clear queue
+    - volume: Set volume (requires params={'volume': 0-100})
+    - loop: Toggle loop mode
+    """
+    try:
+        bridge = get_dashboard_bridge()
+        if not bridge:
+            raise HTTPException(status_code=503, detail="Bot bridge not available")
+        
+        result = await bridge.execute_command(guild_id, command, **(params or {}))
+        
+        if not result['success']:
+            raise HTTPException(status_code=400, detail=result.get('error', 'Command failed'))
+        
+        return JSONResponse(result)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error executing command {command} for guild {guild_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/guild/{guild_id}/queue/detailed")
+async def get_guild_queue_detailed(guild_id: int):
+    """Get detailed queue information for specific guild"""
+    try:
+        bridge = get_dashboard_bridge()
+        if not bridge:
+            raise HTTPException(status_code=503, detail="Bot bridge not available")
+        
+        queue_info = await bridge.get_guild_queue(guild_id)
+        
+        if not queue_info:
+            raise HTTPException(status_code=404, detail="Queue not found or bot not in voice channel")
+        
+        return JSONResponse(queue_info.to_dict())
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting detailed queue for guild {guild_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/status/live")
+async def get_live_bot_status():
+    """Get real-time bot status directly from bridge"""
+    try:
+        bridge = get_dashboard_bridge()
+        
+        if not bridge:
+            return JSONResponse({
+                "connected": False,
+                "status": "bridge_unavailable",
+                "message": "Dashboard running in standalone mode",
+                "timestamp": datetime.now().isoformat()
+            })
+        
+        status = await bridge.get_bot_status()
+        return JSONResponse(status.to_dict())
+    except Exception as e:
+        logger.error(f"Error getting live status: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/health/services")
+async def get_all_services_health():
+    """Get health status of all services (bot, bridge, dashboard)"""
+    try:
+        bridge = get_dashboard_bridge()
+        
+        if not bridge:
+            return JSONResponse({
+                "dashboard": True,
+                "bridge": False,
+                "bot": False,
+                "message": "Dashboard running in standalone mode"
+            })
+        
+        health = await bridge.get_service_health()
+        health["dashboard"] = True  # Dashboard is always healthy if responding
+        
+        return JSONResponse(health)
+    except Exception as e:
+        logger.error(f"Error getting service health: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/queues/all")
+async def get_all_queues():
+    """Get all active queues across all guilds"""
+    try:
+        bridge = get_dashboard_bridge()
+        
+        if not bridge:
+            return JSONResponse({
+                "queues": [],
+                "count": 0,
+                "message": "Bridge not available"
+            })
+        
+        queues = await bridge.get_all_queues()
+        
+        return JSONResponse({
+            "queues": [q.to_dict() for q in queues],
+            "count": len(queues)
+        })
+    except Exception as e:
+        logger.error(f"Error getting all queues: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ============================================================================
+# WEBSOCKET ENDPOINT
+# ============================================================================
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     """WebSocket endpoint for real-time updates"""
@@ -827,6 +970,10 @@ async def websocket_endpoint(websocket: WebSocket):
         manager.disconnect(websocket)
 
 
+# ============================================================================
+# BOT CONTROL ENDPOINTS
+# ============================================================================
+
 @app.post("/api/bot/start")
 async def start_bot():
     """Start the bot (if not running)"""
@@ -853,6 +1000,10 @@ async def restart_bot():
         "message": "Bot control through integrated launcher only. Use bot_with_dashboard.py"
     })
 
+
+# ============================================================================
+# UTILITY FUNCTIONS
+# ============================================================================
 
 async def update_bot_state(new_state: Dict[str, Any]):
     """Update bot state and broadcast to connected clients"""
