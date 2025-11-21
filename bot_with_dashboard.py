@@ -4,6 +4,8 @@ Runs both bot and dashboard in the same process using asyncio tasks
 Provides real-time communication between components
 
 FIX WEBUI #4: Complete integration of bot and dashboard
+FIX INTEGRATION #1: Remove duplicate event handlers and API endpoints
+FIX INTEGRATION #2: Connect WebSocket manager to dashboard bridge
 """
 import asyncio
 import logging
@@ -58,6 +60,10 @@ class IntegratedMusicBot:
         # Create dashboard bridge
         self.dashboard_bridge = DashboardBridge(self.bot)
         set_dashboard_bridge(self.dashboard_bridge)
+        
+        # FIX INTEGRATION #2: Connect WebSocket manager to bridge
+        self.dashboard_bridge.set_websocket_manager(websocket_manager)
+        logger.info("✅ WebSocket manager connected to dashboard bridge")
         
         # Subscribe dashboard to bridge updates
         self.dashboard_bridge.subscribe(self._handle_bridge_update)
@@ -123,8 +129,8 @@ class IntegratedMusicBot:
                 if queue_info:
                     bot_state['queues'][str(guild_id)] = queue_info.to_dict()
             
-            # Broadcast to WebSocket clients
-            await self._broadcast_to_dashboard(message['type'], message['data'])
+            # Broadcast to WebSocket clients (handled by bridge now)
+            # No need to call websocket_manager.broadcast here - bridge does it
             
         except Exception as e:
             logger.error(f"Error handling bridge update: {e}", exc_info=True)
@@ -242,104 +248,17 @@ class IntegratedMusicBot:
         logger.info("✅ Shutdown complete")
 
 
-# Update dashboard app to use bridge
-@dashboard_app.on_event("startup")
-async def dashboard_startup():
-    """Dashboard startup event"""
-    logger.info("Dashboard startup - checking for bridge...")
-    
-    # Get bridge instance
-    from services.dashboard_bridge import get_dashboard_bridge
-    bridge = get_dashboard_bridge()
-    
-    if bridge:
-        logger.info("✅ Dashboard connected to bot bridge")
-        
-        # Update initial state
-        try:
-            status = await bridge.get_bot_status()
-            bot_state.update(status.to_dict())
-            bot_state['config_error'] = None
-            
-            # Get all queues
-            queues = await bridge.get_all_queues()
-            bot_state['queues'] = {
-                str(q.guild_id): q.to_dict() for q in queues
-            }
-        except Exception as e:
-            logger.error(f"Error getting initial state: {e}")
-    else:
-        logger.warning("⚠️ Dashboard running without bot bridge")
+# FIX INTEGRATION #1: Removed duplicate @dashboard_app.on_event("startup")
+# The dashboard app now uses modern lifespan handler in web_dashboard/app.py
+# and automatically connects to the bridge when available
 
-
-# Add API endpoints that use the bridge
-from fastapi import HTTPException
-
-@dashboard_app.post("/api/guild/{guild_id}/command")
-async def execute_guild_command(guild_id: int, command: str, params: dict = None):
-    """Execute a command for a specific guild"""
-    from services.dashboard_bridge import get_dashboard_bridge
-    bridge = get_dashboard_bridge()
-    
-    if not bridge:
-        raise HTTPException(status_code=503, detail="Bot bridge not available")
-    
-    result = await bridge.execute_command(guild_id, command, **(params or {}))
-    
-    if not result['success']:
-        raise HTTPException(status_code=400, detail=result.get('error', 'Command failed'))
-    
-    return result
-
-
-@dashboard_app.get("/api/guild/{guild_id}/queue")
-async def get_guild_queue_api(guild_id: int):
-    """Get queue for a specific guild"""
-    from services.dashboard_bridge import get_dashboard_bridge
-    bridge = get_dashboard_bridge()
-    
-    if not bridge:
-        raise HTTPException(status_code=503, detail="Bot bridge not available")
-    
-    queue_info = await bridge.get_guild_queue(guild_id)
-    
-    if not queue_info:
-        raise HTTPException(status_code=404, detail="Queue not found")
-    
-    return queue_info.to_dict()
-
-
-@dashboard_app.get("/api/status/live")
-async def get_live_status():
-    """Get live bot status from bridge"""
-    from services.dashboard_bridge import get_dashboard_bridge
-    bridge = get_dashboard_bridge()
-    
-    if not bridge:
-        return {
-            "connected": False,
-            "status": "bridge_unavailable",
-            "message": "Dashboard running standalone"
-        }
-    
-    status = await bridge.get_bot_status()
-    return status.to_dict()
-
-
-@dashboard_app.get("/api/health/services")
-async def get_services_health():
-    """Get health status of all services"""
-    from services.dashboard_bridge import get_dashboard_bridge
-    bridge = get_dashboard_bridge()
-    
-    if not bridge:
-        return {
-            "dashboard": True,
-            "bridge": False,
-            "bot": False
-        }
-    
-    return await bridge.get_service_health()
+# FIX INTEGRATION #1: Removed duplicate API endpoints
+# All API endpoints are now defined in web_dashboard/app.py
+# The following endpoints were removed from here:
+# - POST /api/guild/{guild_id}/command
+# - GET /api/guild/{guild_id}/queue
+# - GET /api/status/live
+# - GET /api/health/services
 
 
 async def main():
