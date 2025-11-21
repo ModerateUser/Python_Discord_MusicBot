@@ -1,371 +1,551 @@
-# 🎵 Python Discord Music Bot
+# 🎵 Discord Music Bot
 
-A feature-rich Discord music bot with comprehensive security, playlist management, advanced AI features, and **AI Music Synthesis** capabilities.
+A feature-rich Discord music bot with AI capabilities, web dashboard, and comprehensive music management features.
+
+[![Python](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![Discord.py](https://img.shields.io/badge/discord.py-2.0+-blue.svg)](https://github.com/Rapptz/discord.py)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 ## ✨ Features
 
 ### Core Features
-- 🎶 **Music Playback**: Stream from YouTube or play local files
-- 📚 **Playlist Management**: Create, manage, and play custom playlists
-- 🔊 **Audio Controls**: Volume, pause, resume, skip, loop
-- 🔍 **YouTube Search**: Search and play songs directly
-- 🔒 **Security Hardened**: Rate limiting, input validation, path traversal protection
-- 🛡️ **Production Ready**: Comprehensive error handling and logging
+- 🎵 **YouTube Streaming** - Play music directly from YouTube
+- 📁 **Local File Playback** - Support for MP3, WAV, FLAC, OGG, and more
+- 📋 **Queue Management** - Advanced queue system with shuffle, loop, and skip
+- 📝 **Playlist System** - Create, save, and load custom playlists
+- 🎮 **Natural Language Commands** - Use `!/` prefix for conversational commands
+- 🌐 **Web Dashboard** - Real-time monitoring and control via web interface
 
-### 🤖 Advanced AI Features
-- 🎼 **AI Music Synthesis**: Generate original music from text descriptions
-- 🧠 **Natural Language Commands**: Control the bot with plain English (`!/`)
-- 🎵 **Mood-Based Playlists**: AI-generated playlists based on mood and energy
-- 🎧 **Auto-DJ Mode**: Intelligent song selection based on listening history
-- 🎭 **Mood Transitions**: Smooth transitions between different musical moods
-- 🔍 **Similar Song Discovery**: Find songs similar to what's playing
-- 📊 **Song Analysis**: Analyze tempo, mood, energy, and musical characteristics
-- 🎨 **Personalized Recommendations**: Context-aware suggestions based on history
-- ⚡ **Complex Action Chaining**: Execute multiple actions with temporal triggers
+### AI-Powered Features
+- 🤖 **AI Music Generation** - Generate custom music from text descriptions
+- 🎭 **Mood-Based Playlists** - Create playlists based on mood and atmosphere
+- 🎧 **Auto-DJ Mode** - AI-powered automatic music selection
+- 🔍 **Similar Song Discovery** - Find songs similar to what's playing
+- 📊 **Song Analysis** - Get detailed information about tracks
 
-### 🎼 AI Music Synthesis
-- **Generate Original Music**: Create unique tracks from text prompts
-- **Multiple Backends**: Suno API (high quality) or MusicGen (local, private)
-- **Personalized Creation**: Uses listening history for better results
-- **Context-Aware**: Understands mood, style, tempo, and genre
-- **Smart Caching**: Reuses previously generated music
-- **Seamless Integration**: Works with natural language and action chaining
+### Advanced Features
+- 🔄 **Real-time Updates** - WebSocket-based live status updates
+- 📈 **Service Health Monitoring** - Built-in health checks for all services
+- 🎚️ **Volume Control** - Per-guild volume settings
+- ⏸️ **Playback Control** - Pause, resume, skip, and stop
+- 🔁 **Loop Modes** - Loop single tracks or entire queues
+- 🎲 **Queue Shuffle** - Randomize your music queue
 
 ## 🚀 Quick Start
 
 ### Prerequisites
 
-- Python 3.8+
-- FFmpeg installed and in PATH
+- Python 3.8 or higher
 - Discord Bot Token ([Get one here](https://discord.com/developers/applications))
-- *Optional*: LLM for AI features (Ollama, OpenAI, Anthropic, etc.)
-- *Optional*: Suno API key or GPU for music synthesis
+- FFmpeg installed on your system
 
 ### Installation
 
 1. **Clone the repository**
-```bash
-git clone https://github.com/ModerateUser/Python_Discord_MusicBot.git
-cd Python_Discord_MusicBot
+   ```bash
+   git clone https://github.com/ModerateUser/Python_Discord_MusicBot.git
+   cd Python_Discord_MusicBot
+   ```
+
+2. **Create configuration file**
+   ```bash
+   cp config.example.json config.json
+   ```
+
+3. **Edit config.json**
+   - Add your Discord bot token
+   - Set your Discord user ID as owner
+   - Configure other settings as needed
+
+4. **Launch the bot**
+
+   **Windows:**
+   ```bash
+   # Interactive menu
+   launch_all.bat
+   
+   # Or choose specific mode:
+   launch.bat              # Bot only
+   launch_integrated.bat   # Bot + Dashboard
+   launch_gui.bat          # Dashboard only
+   ```
+
+   **Linux/Mac:**
+   ```bash
+   # Make scripts executable
+   chmod +x launch.sh launch_integrated.sh
+   
+   # Launch
+   ./launch.sh              # Bot only
+   ./launch_integrated.sh   # Bot + Dashboard
+   ```
+
+The launcher will automatically:
+- ✅ Check Python installation
+- ✅ Create virtual environment
+- ✅ Install dependencies
+- ✅ Verify configuration
+- ✅ Start the bot
+
+## 📖 Usage
+
+### Basic Commands
+
+#### Music Playback
+```
+!play <song name or URL>    - Play a song
+!pause                      - Pause playback
+!resume                     - Resume playback
+!skip                       - Skip current song
+!stop                       - Stop and clear queue
+!volume <0-100>             - Set volume
+!nowplaying                 - Show current song
+!loop                       - Toggle loop mode
 ```
 
-2. **Install dependencies**
-```bash
-pip install -r requirements.txt
-
-# Optional: For local music synthesis (MusicGen)
-# Uncomment audiocraft, torch, torchaudio in requirements.txt
-# pip install audiocraft torch torchaudio
+#### Queue Management
+```
+!queue [page]               - Show queue
+!clear                      - Clear queue
+!shuffle                    - Shuffle queue
+!remove <position>          - Remove song from queue
+!move <from> <to>           - Move song in queue
 ```
 
-3. **Configure the bot**
-```bash
-cp config.example.json config.json
-# Edit config.json with your bot token and settings
+#### Playlists
+```
+!playlist create <name>     - Create new playlist
+!playlist save <name>       - Save current queue
+!playlist load <name>       - Load playlist
+!playlist list              - List all playlists
+!playlist delete <name>     - Delete playlist
 ```
 
-4. **Run the bot**
-```bash
-python bot.py
+#### AI Features (when enabled)
 ```
+!aiplay <description>       - Generate AI music
+!mood <mood>                - Create mood playlist
+!similar                    - Find similar songs
+!autodj                     - Enable auto-DJ mode
+```
+
+#### Utility
+```
+!help [command]             - Show help
+!info                       - Bot information
+!ping                       - Check latency
+!health                     - Service health check
+```
+
+### Natural Language Commands
+
+When LLM is enabled, use the `!/` prefix for conversational commands:
+
+```
+!/ play something relaxing
+!/ skip this song and play something upbeat
+!/ create a playlist of happy songs
+!/ what's playing right now?
+```
+
+### Web Dashboard
+
+Access the web dashboard at `http://localhost:8000` when running in integrated mode:
+
+- 📊 Real-time bot status
+- 🎵 View all active queues
+- 🎮 Control playback remotely
+- 📈 Monitor service health
+- ⚙️ View configuration
+
+API documentation available at `http://localhost:8000/docs`
 
 ## ⚙️ Configuration
 
-### Basic Configuration (config.json)
+### Basic Configuration
+
+Edit `config.json`:
 
 ```json
 {
-    "token": "YOUR_BOT_TOKEN_HERE",
-    "owner_id": 123456789012345678,
-    "playing": "!help for commands",
-    "command_prefix": "!",
-    "max_queue_size": 100,
-    "max_playlist_size": 500,
-    "allowed_file_extensions": [".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac", ".opus"],
-    "music_directory": null
+  "token": "YOUR_BOT_TOKEN",
+  "owner_id": "YOUR_DISCORD_USER_ID",
+  "command_prefix": "!",
+  "playing": "!help for commands",
+  "max_queue_size": 100,
+  "max_playlist_size": 500
 }
 ```
 
-### LLM Configuration (Optional - for AI features)
+### Optional Features
+
+#### AI Music Generation
+
+Add to `config.json`:
 
 ```json
 {
-    "llm": {
-        "enabled": true,
-        "provider": "ollama",
-        "model": "llama3",
-        "api_key": null,
-        "base_url": "http://localhost:11434",
-        "timeout": 30,
-        "max_tokens": 500
-    }
+  "music_synthesis": {
+    "enabled": true,
+    "backend": "musicgen",
+    "model": "facebook/musicgen-small",
+    "cache_dir": "./cache/synthesis"
+  }
 }
 ```
 
-See [docs/LLM_INTEGRATION.md](docs/LLM_INTEGRATION.md) for detailed LLM setup.
+#### LLM Integration
 
-### Music Synthesis Configuration (Optional)
+Add to `config.json`:
 
 ```json
 {
-    "music_synthesis": {
-        "enabled": true,
-        "backend": "suno_api",
-        "suno_api_key": "your-api-key-here",
-        "cache_dir": "generated_music",
-        "max_cache_size_mb": 1000,
-        "default_duration": 30,
-        "default_quality": "medium"
-    }
+  "llm": {
+    "enabled": true,
+    "provider": "openai",
+    "api_key": "YOUR_API_KEY",
+    "model": "gpt-4"
+  }
 }
 ```
 
-**Backends**:
-- `suno_api`: High-quality, requires API key ($10/500 songs)
-- `musicgen_local`: Free, local generation, requires GPU (8GB+ VRAM)
-- `disabled`: Turn off synthesis
+#### Local Music Files
 
-See [docs/MUSIC_SYNTHESIS.md](docs/MUSIC_SYNTHESIS.md) for complete setup guide.
+Add to `config.json`:
 
-## 🎮 Commands
-
-### Basic Music Commands
-- `!play <song/url>` - Play a song from YouTube or local file
-- `!pause` - Pause the current song
-- `!resume` - Resume playback
-- `!skip` - Skip to the next song
-- `!stop` - Stop playback and clear queue
-- `!loop` - Toggle loop mode for current song
-- `!volume <0-100>` - Set volume
-- `!nowplaying` - Show currently playing song
-- `!search <query>` - Search YouTube for songs
-
-### Playlist Commands
-- `!playlist create <name>` - Create a new playlist
-- `!playlist add <name> <song>` - Add song to playlist
-- `!playlist play <name>` - Play a playlist
-- `!playlist list` - List all playlists
-- `!playlist show <name>` - Show songs in playlist
-- `!playlist delete <name>` - Delete playlist (owner only)
-
-### Voice Commands
-- `!join` - Join your voice channel
-- `!leave` - Leave voice channel
-
-### 🤖 Natural Language Commands (with LLM)
-
-Use `!/` prefix for natural language:
-
-```
-!/ play something upbeat
-!/ create a chill playlist with 10 songs
-!/ skip this and play jazz
-!/ what's in the queue
-!/ set volume to 50
-!/ find songs similar to what's playing
-!/ analyze the current song
-!/ enable auto-dj mode with energetic music
+```json
+{
+  "music_directory": "./music",
+  "allowed_file_extensions": [".mp3", ".wav", ".flac", ".ogg", ".m4a"]
+}
 ```
 
-### 🎼 AI Music Synthesis Commands
+## 🏗️ Architecture
 
-```
-!/ synthesize upbeat electronic music
-!/ create chill lofi beats for studying
-!/ generate energetic rock music
-!/ make original music based on what I've been listening to
-!/ compose calm ambient music for 60 seconds
-```
-
-### ⚡ Complex Action Chaining
-
-```
-!/ play jazz for 10 minutes then switch to rock
-!/ create a workout playlist with 15 energetic songs
-!/ synthesize upbeat music then play it on loop
-!/ play chill music, set volume to 30, and loop it
-!/ find songs similar to what's playing and queue them
-!/ transition from calm to energetic over 10 songs
-```
-
-## 🔒 Security Features
-
-### Implemented Protections
-- ✅ **Path Traversal Protection**: Prevents unauthorized file access
-- ✅ **Input Validation**: All user inputs sanitized and validated
-- ✅ **Rate Limiting**: 10 requests per 60 seconds for YouTube API
-- ✅ **Timeout Protection**: 45s for extraction, 30s for search
-- ✅ **File Extension Whitelist**: Only allowed audio formats
-- ✅ **Type-Safe Comparisons**: Prevents confusion attacks
-- ✅ **Token Protection**: .gitignore prevents accidental commits
-- ✅ **Atomic File Operations**: Prevents data corruption
-- ✅ **Comprehensive Logging**: Security event monitoring
-
-### Configuration Security
-- **owner_id**: Must be integer (not string) to prevent type confusion
-- **music_directory**: Optional restriction to specific folder
-- **allowed_file_extensions**: Whitelist of safe audio formats
-- **LLM API Keys**: Stored securely, never logged
-
-## 📁 Project Structure
+### Project Structure
 
 ```
 Python_Discord_MusicBot/
-├── bot.py                          # Main bot entry point
-├── config.json                     # Configuration (gitignored)
-├── config.example.json             # Configuration template
-├── requirements.txt                # Python dependencies
-├── .gitignore                      # Git ignore rules
+├── bot.py                      # Basic bot entry point
+├── bot_with_dashboard.py       # Integrated bot + dashboard
+├── config.json                 # Configuration file
+├── requirements.txt            # Python dependencies
+├── launch*.bat                 # Windows launchers
+├── launch*.sh                  # Linux/Mac launchers
 │
-├── core/
-│   ├── __init__.py
-│   └── config.py                  # Configuration management
+├── core/                       # Core bot functionality
+│   ├── bot_core.py            # Main bot class
+│   ├── config.py              # Configuration management
+│   ├── service_manager.py     # Service dependency injection
+│   └── nlp_handler.py         # Natural language processing
 │
-├── cogs/
-│   ├── __init__.py
-│   ├── music.py                   # Music playback commands
-│   ├── playlist.py                # Playlist management
-│   ├── queue_manager.py           # Queue management
-│   └── ai_music.py                # AI music features
+├── cogs/                       # Command modules
+│   ├── help.py                # Help system
+│   ├── music.py               # Music playback
+│   ├── playlist.py            # Playlist management
+│   ├── queue_manager.py       # Queue operations
+│   └── ai_music.py            # AI features
 │
-├── models/
-│   ├── __init__.py
-│   └── song.py                    # Song and queue models
+├── services/                   # Backend services
+│   ├── dashboard_bridge.py    # Dashboard integration
+│   ├── audio_service.py       # Audio processing
+│   ├── synthesis_service.py   # AI music generation
+│   └── advanced_ai_service.py # Advanced AI features
 │
-├── services/
-│   ├── __init__.py
-│   ├── audio_service.py           # YouTube/audio handling
-│   ├── playlist_service.py        # Playlist file operations
-│   ├── llm_service.py             # LLM integration
-│   ├── ai_music_service.py        # Advanced AI features
-│   └── music_synthesis_service.py # AI music generation
+├── web_dashboard/              # Web interface
+│   ├── app.py                 # FastAPI application
+│   ├── templates/             # HTML templates
+│   └── static/                # CSS/JS assets
 │
-├── utils/
-│   ├── __init__.py
-│   ├── embeds.py                  # Discord embed formatting
-│   └── logger.py                  # Logging configuration
+├── utils/                      # Utility functions
+│   ├── logger.py              # Logging setup
+│   └── validators.py          # Input validation
 │
-└── docs/
-    ├── LLM_INTEGRATION.md         # LLM setup guide
-    └── MUSIC_SYNTHESIS.md         # Music synthesis guide
+├── models/                     # Data models
+│   └── queue.py               # Queue data structures
+│
+├── tests/                      # Unit tests
+│   └── test_*.py              # Test files
+│
+└── docs/                       # Documentation
+    └── API.md                 # API documentation
 ```
 
-## 🔧 Troubleshooting
+### Key Components
+
+#### Service Manager
+Dependency injection system for managing bot services:
+- Audio Service
+- Synthesis Service
+- Advanced AI Service
+- Dashboard Bridge
+
+#### Dashboard Bridge
+Real-time communication between Discord bot and web dashboard:
+- WebSocket updates
+- Command execution
+- Status monitoring
+- Queue synchronization
+
+#### Music Queue System
+Advanced queue management with:
+- Thread-safe operations
+- Loop modes (single, queue)
+- Shuffle support
+- Position tracking
+- History tracking
+
+## 🔧 Development
+
+### Running Tests
+
+```bash
+# Install dev dependencies
+pip install -r requirements-dev.txt
+
+# Run tests
+pytest tests/
+
+# Run with coverage
+pytest --cov=. tests/
+```
+
+### Code Style
+
+This project follows PEP 8 style guidelines:
+
+```bash
+# Format code
+black .
+
+# Check style
+flake8 .
+
+# Type checking
+mypy .
+```
+
+### Adding New Features
+
+1. Create a new cog in `cogs/` directory
+2. Implement commands using discord.py command decorators
+3. Register the cog in `core/bot_core.py`
+4. Add tests in `tests/`
+5. Update documentation
+
+## 🐛 Troubleshooting
 
 ### Bot won't start
-- Check your token is correct in config.json
-- Ensure owner_id is an **integer**, not a string
-- Verify FFmpeg is installed: `ffmpeg -version`
 
-### Voice connection issues
-- Ensure PyNaCl is installed: `pip install PyNaCl>=1.5.0`
-- Check bot has "Connect" and "Speak" permissions
-- Verify you're in a voice channel
+**Problem:** `Invalid bot token`
+- **Solution:** Check your `config.json` and ensure the token is correct
 
-### YouTube playback fails
-- Update yt-dlp: `pip install --upgrade yt-dlp`
-- Check rate limiting (10 requests per 60 seconds)
-- Verify internet connection
+**Problem:** `FFmpeg not found`
+- **Solution:** Install FFmpeg and add it to your system PATH
 
-### Natural language commands not working
-- Ensure LLM is configured in config.json
-- Check LLM service is running (e.g., Ollama)
-- Verify API key if using cloud provider
-- See [docs/LLM_INTEGRATION.md](docs/LLM_INTEGRATION.md)
+**Problem:** `Module not found`
+- **Solution:** Run `pip install -r requirements.txt` in your virtual environment
 
-### Music synthesis not available
-- Check `music_synthesis.enabled` is `true` in config.json
-- For Suno: Verify API key is valid
-- For MusicGen: Ensure dependencies installed (`audiocraft`, `torch`)
-- Check GPU availability for MusicGen
-- See [docs/MUSIC_SYNTHESIS.md](docs/MUSIC_SYNTHESIS.md)
+### Music won't play
 
-### Slow music generation
-- Use smaller MusicGen model: `facebook/musicgen-small`
-- Reduce duration to 15-30 seconds
-- Switch to Suno API for faster generation
-- Ensure GPU is being used (not CPU)
+**Problem:** `Not connected to voice channel`
+- **Solution:** Join a voice channel before using music commands
 
-## 📊 Performance & Limits
+**Problem:** `Age-restricted video`
+- **Solution:** Some YouTube videos require authentication and cannot be played
 
-- **Queue Size**: 100 songs (configurable)
-- **Playlist Size**: 500 songs (configurable)
-- **Rate Limit**: 10 YouTube requests per 60 seconds
-- **Timeout**: 45s for extraction, 30s for search
-- **Memory**: Automatic cleanup of inactive guild queues every hour
-- **Music Synthesis**: 30-120 seconds per generation
-- **Cache Size**: 1GB default (configurable)
+**Problem:** `Download error`
+- **Solution:** Update yt-dlp: `pip install -U yt-dlp`
 
-## 🎯 Use Cases
+### Dashboard issues
 
-### For DJs and Music Enthusiasts
-- Create mood-based playlists automatically
-- Discover similar songs intelligently
-- Analyze song characteristics
-- Generate original background music
+**Problem:** Dashboard won't load
+- **Solution:** Ensure you're using `launch_integrated.bat` or `bot_with_dashboard.py`
 
-### For Study/Work Sessions
-- Auto-DJ mode for continuous music
-- Mood transitions for focus/break cycles
-- Generate custom ambient/lofi tracks
-- Natural language control without interruption
-
-### For Parties and Events
-- Complex action chaining for event flow
-- Synthesize custom intro/outro music
-- Smart shuffling for optimal energy
-- Personalized recommendations
-
-### For Content Creators
-- Generate royalty-free background music
-- Create unique soundtracks
-- Test music concepts quickly
-- Analyze song structures
-
-## 🤝 Contributing
-
-Contributions are welcome! Please:
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Submit a pull request
+**Problem:** Real-time updates not working
+- **Solution:** Check WebSocket connection in browser console
 
 ## 📝 License
 
-This project is open source and available under the MIT License.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 🙏 Acknowledgments
+## 🤝 Contributing
 
-- Built with [discord.py](https://github.com/Rapptz/discord.py)
-- Audio extraction via [yt-dlp](https://github.com/yt-dlp/yt-dlp)
-- FFmpeg for audio processing
-- LLM integration with Ollama, OpenAI, Anthropic, Google
-- Music synthesis via [Suno AI](https://suno.ai/) and [MusicGen](https://github.com/facebookresearch/audiocraft)
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
 
 ## 📞 Support
 
-For issues, questions, or suggestions:
-- Open an issue on GitHub
-- Check existing issues for solutions
-- Read documentation in `docs/` folder
+- **Issues:** [GitHub Issues](https://github.com/ModerateUser/Python_Discord_MusicBot/issues)
+- **Documentation:** [Wiki](https://github.com/ModerateUser/Python_Discord_MusicBot/wiki)
+- **Discord:** [Support Server](https://discord.gg/your-invite-link)
 
-## 📚 Documentation
+## 🙏 Acknowledgments
 
-- [LLM Integration Guide](docs/LLM_INTEGRATION.md) - Setup LLM for AI features
-- [Music Synthesis Guide](docs/MUSIC_SYNTHESIS.md) - Setup and use AI music generation
+- [discord.py](https://github.com/Rapptz/discord.py) - Discord API wrapper
+- [yt-dlp](https://github.com/yt-dlp/yt-dlp) - YouTube downloader
+- [FastAPI](https://fastapi.tiangolo.com/) - Web framework
+- [MusicGen](https://github.com/facebookresearch/audiocraft) - AI music generation
+
+## 📊 Status
+
+### Current Version: 1.0.0
+
+### Recent Updates
+
+- ✅ **FIX CRITICAL #1-4:** Implemented all launch scripts (Windows & Linux/Mac)
+- ✅ **FIX MEDIUM #1:** Removed config validation bypass, added proper error handling
+- ✅ **FIX MEDIUM #2:** Implemented comprehensive help command system
+- ✅ **FIX MEDIUM #3:** Integrated help cog into bot core
+- ✅ **DOCS:** Created comprehensive README with setup instructions
+
+### Known Issues
+
+- Audio service duplication (two versions exist)
+- Some API endpoints are stubbed (config update, bot control)
+- Static assets created on-the-fly instead of pre-existing
+
+### Roadmap
+
+- [ ] Resolve audio service duplication
+- [ ] Implement config update API
+- [ ] Add rate limiting to endpoints
+- [ ] Improve WebSocket error handling
+- [ ] Add reconnection logic
+- [ ] Implement comprehensive test coverage
+- [ ] Add Docker support
+- [ ] Create installation wizard
+
+## 🌟 Features in Detail
+
+### Music Playback
+
+The bot supports multiple audio sources:
+- **YouTube:** Direct streaming from YouTube videos and playlists
+- **Local Files:** Play music from your local filesystem
+- **URLs:** Support for direct audio file URLs
+
+### Queue System
+
+Advanced queue management features:
+- **Unlimited Queue Size:** Configurable maximum (default: 100)
+- **Position Tracking:** Know exactly where you are in the queue
+- **History:** Track previously played songs
+- **Loop Modes:** Loop single tracks or entire queue
+- **Shuffle:** Randomize queue order
+
+### AI Integration
+
+When enabled, the bot can:
+- **Generate Music:** Create original music from text descriptions
+- **Analyze Songs:** Get detailed information about tracks
+- **Mood Detection:** Automatically detect and categorize song moods
+- **Smart Recommendations:** AI-powered song suggestions
+- **Auto-DJ:** Automatically select and play music based on context
+
+### Web Dashboard
+
+Real-time web interface featuring:
+- **Live Status:** See bot status and connected guilds
+- **Queue Viewer:** View and manage queues for all servers
+- **Remote Control:** Control playback from your browser
+- **Health Monitoring:** Check service health and uptime
+- **Configuration:** View and manage bot settings
+- **API Access:** RESTful API with OpenAPI documentation
+
+## 💡 Tips & Tricks
+
+### Performance Optimization
+
+1. **Use Local Files:** Local playback is faster than streaming
+2. **Limit Queue Size:** Smaller queues use less memory
+3. **Enable Caching:** Cache frequently played songs
+4. **Adjust Buffer Size:** Tune audio buffer for your network
+
+### Best Practices
+
+1. **Regular Updates:** Keep dependencies up to date
+2. **Monitor Logs:** Check logs regularly for issues
+3. **Backup Playlists:** Export important playlists
+4. **Use Virtual Environment:** Isolate dependencies
+5. **Configure Permissions:** Set appropriate bot permissions
+
+### Advanced Usage
+
+#### Custom Commands
+
+Add custom commands by creating a new cog:
+
+```python
+from discord.ext import commands
+
+class CustomCog(commands.Cog):
+    @commands.command()
+    async def mycommand(self, ctx):
+        await ctx.send("Hello!")
+
+async def setup(bot):
+    await bot.add_cog(CustomCog(bot))
+```
+
+#### Service Integration
+
+Integrate custom services:
+
+```python
+from core.service_manager import ServiceManager
+
+class MyService:
+    async def initialize(self):
+        # Setup code
+        pass
+    
+    async def shutdown(self):
+        # Cleanup code
+        pass
+
+# Register in bot_core.py
+bot.service_manager.register_service('my_service', MyService())
+```
+
+## 🔐 Security
+
+### Best Practices
+
+- **Never commit** your `config.json` with tokens
+- **Use environment variables** for sensitive data
+- **Restrict bot permissions** to minimum required
+- **Enable 2FA** on your Discord account
+- **Regular updates** to patch security vulnerabilities
+
+### Token Security
+
+Store your bot token securely:
+
+```bash
+# Use environment variables
+export DISCORD_TOKEN="your_token_here"
+
+# Or use .env file (add to .gitignore)
+echo "DISCORD_TOKEN=your_token_here" > .env
+```
+
+Update config to use environment variables:
+
+```json
+{
+  "token": "${DISCORD_TOKEN}",
+  "owner_id": "${DISCORD_OWNER_ID}"
+}
+```
 
 ---
 
-**⚠️ IMPORTANT SECURITY NOTES:**
-- Never commit your `config.json` file
-- Keep your bot token secret
-- Protect API keys (LLM, Suno)
-- Use environment variables in production
-- Regularly update dependencies
-- Monitor logs for security events
+Made with ❤️ by the Discord Music Bot Team
 
-**🎵 Made with ❤️ for the Discord community**
-
----
-
-**Latest Update**: November 21, 2025 - Added AI Music Synthesis capabilities
+**Star ⭐ this repository if you find it useful!**
