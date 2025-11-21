@@ -3,6 +3,7 @@ Configuration management with security enhancements - FIXED VERSION
 FIX #12: Config validation timing - graceful error handling
 FIX #2: Added to_dict() method for proper config passing
 FIX #3: Added missing music_synthesis, llm, and llm_config fields
+FIX CONFIG #3: Fixed get_config_template() to match config.example.json
 """
 import json
 import os
@@ -35,6 +36,7 @@ class Config:
     FIX #12: Graceful error handling with helpful messages
     FIX #2: Added to_dict() method
     FIX #3: Added missing fields
+    FIX CONFIG #3: Fixed template generation
     """
     
     def __init__(self, config_path: str = 'config.json', validate: bool = True) -> None:
@@ -59,18 +61,19 @@ class Config:
         self.allowed_file_extensions: List[str] = DEFAULT_ALLOWED_EXTENSIONS.copy()
         self.music_directory: Optional[str] = None
         
-        # FIX #3: Add LLM configuration fields
+        # FIX #3: Add LLM configuration fields (matching config.example.json)
         self.llm: Dict[str, Any] = {
             'enabled': False,
-            'provider': 'openai',
-            'model': 'gpt-3.5-turbo',
+            'provider': 'ollama',
+            'model': 'llama3',
             'api_key': None,
-            'max_tokens': 500,
-            'temperature': 0.7
+            'base_url': 'http://localhost:11434',
+            'timeout': 30,
+            'max_tokens': 500
         }
         self.llm_config: Optional[Dict[str, Any]] = None
         
-        # FIX #3: Add music synthesis configuration
+        # FIX #3: Add music synthesis configuration (matching config.example.json)
         self.music_synthesis: Dict[str, Any] = {
             'enabled': False,
             'backend': 'disabled',
@@ -81,6 +84,13 @@ class Config:
             'suno_api_key': None,
             'suno_api_url': 'https://api.suno.ai/v1',
             'musicgen_model': 'facebook/musicgen-small'
+        }
+        
+        # FIX CONFIG #3: Add web_dashboard configuration
+        self.web_dashboard: Dict[str, Any] = {
+            'enabled': True,
+            'host': '0.0.0.0',
+            'port': 8000
         }
         
         # FIX #12: Track validation state
@@ -127,6 +137,7 @@ class Config:
         Load configuration from JSON file
         FIX #12: Detailed error messages for file issues
         FIX #3: Load LLM and music synthesis config
+        FIX CONFIG #3: Load web_dashboard config
         """
         try:
             with open(self.config_path, 'r', encoding='utf-8') as f:
@@ -158,6 +169,10 @@ class Config:
                 # FIX #3: Load music synthesis configuration
                 if 'music_synthesis' in data:
                     self.music_synthesis.update(data['music_synthesis'])
+                
+                # FIX CONFIG #3: Load web_dashboard configuration
+                if 'web_dashboard' in data:
+                    self.web_dashboard.update(data['web_dashboard'])
                 
                 logger.info(f"Configuration loaded from {self.config_path}")
                 
@@ -379,6 +394,7 @@ class Config:
     def to_dict(self) -> Dict[str, Any]:
         """
         FIX #2: Convert config to dictionary for service initialization
+        FIX CONFIG #3: Include web_dashboard in dict
         
         Returns:
             Dictionary representation of config
@@ -394,19 +410,21 @@ class Config:
             'music_directory': self.music_directory,
             'llm': self.llm,
             'llm_config': self.llm_config,
-            'music_synthesis': self.music_synthesis
+            'music_synthesis': self.music_synthesis,
+            'web_dashboard': self.web_dashboard
         }
     
     def get_config_template(self) -> str:
         """
         Get a template config.json file content
+        FIX CONFIG #3: Match config.example.json EXACTLY
         
         Returns:
             JSON template string
         """
         template = {
             "token": "YOUR_BOT_TOKEN_HERE",
-            "owner_id": "YOUR_DISCORD_USER_ID_HERE",
+            "owner_id": 123456789012345678,  # FIX: Use number, not string
             "playing": DEFAULT_PLAYING,
             "command_prefix": DEFAULT_PREFIX,
             "max_queue_size": DEFAULT_MAX_QUEUE_SIZE,
@@ -415,22 +433,28 @@ class Config:
             "music_directory": None,
             "llm": {
                 "enabled": False,
-                "provider": "openai",
-                "model": "gpt-3.5-turbo",
+                "provider": "ollama",  # FIX: Use ollama, not openai
+                "model": "llama3",     # FIX: Use llama3, not gpt-3.5-turbo
                 "api_key": None,
-                "max_tokens": 500,
-                "temperature": 0.7
+                "base_url": "http://localhost:11434",  # FIX: Add missing field
+                "timeout": 30,                          # FIX: Add missing field
+                "max_tokens": 500                       # FIX: Add missing field
             },
             "music_synthesis": {
                 "enabled": False,
                 "backend": "disabled",
-                "cache_dir": "generated_music",
-                "max_cache_size_mb": 1000,
-                "default_duration": 30,
-                "default_quality": "medium",
-                "suno_api_key": None,
-                "suno_api_url": "https://api.suno.ai/v1",
-                "musicgen_model": "facebook/musicgen-small"
+                "cache_dir": "generated_music",              # FIX: Add missing field
+                "max_cache_size_mb": 1000,                   # FIX: Add missing field
+                "default_duration": 30,                      # FIX: Add missing field
+                "default_quality": "medium",                 # FIX: Add missing field
+                "suno_api_key": None,                        # FIX: Add missing field
+                "suno_api_url": "https://api.suno.ai/v1",   # FIX: Add missing field
+                "musicgen_model": "facebook/musicgen-small"  # FIX: Add missing field
+            },
+            "web_dashboard": {  # FIX: Add completely missing section
+                "enabled": True,
+                "host": "0.0.0.0",
+                "port": 8000
             }
         }
         return json.dumps(template, indent=4)
