@@ -1,6 +1,8 @@
 """
 Custom Exception Hierarchy for Discord Music Bot
 Provides clear, specific exceptions for better error handling
+
+FIX BUG #1: Added missing OwnerOnlyError exception and get_user_friendly_message() function
 """
 
 
@@ -270,6 +272,12 @@ class BotPermissionError(PermissionError):
     pass
 
 
+# FIX BUG #1: Add missing OwnerOnlyError exception
+class OwnerOnlyError(PermissionError):
+    """Raised when a non-owner tries to use an owner-only command"""
+    pass
+
+
 # Rate Limiting Exceptions
 class RateLimitError(BotException):
     """Base exception for rate limiting errors"""
@@ -309,6 +317,119 @@ def get_exception_class(name: str) -> type:
             return exc_class
     
     raise ValueError(f"Exception class not found: {name}")
+
+
+# FIX BUG #1 & #3: Add missing get_user_friendly_message() function
+def get_user_friendly_message(exception: Exception) -> str:
+    """
+    Convert exception to user-friendly message
+    
+    Args:
+        exception: Exception to convert
+        
+    Returns:
+        User-friendly error message with emoji
+    """
+    # Import discord here to avoid circular imports
+    try:
+        import discord
+    except ImportError:
+        discord = None
+    
+    # Map exception types to friendly messages
+    friendly_messages = {
+        RateLimitError: "⏱️ You're doing that too fast! Please wait a moment.",
+        UserRateLimitError: "⏱️ You're doing that too fast! Please wait a moment.",
+        APIRateLimitError: "⏱️ External API rate limit reached. Please try again later.",
+        OwnerOnlyError: "🔒 This command is restricted to the bot owner.",
+        InsufficientPermissionsError: "🚫 You don't have permission to use this command.",
+        BotPermissionError: "🚫 I don't have the required permissions to do that!",
+        QueueFullError: "📋 The queue is full! Please wait for some songs to finish.",
+        QueueEmptyError: "📋 The queue is empty!",
+        InvalidQueueIndexError: "📋 Invalid queue position specified.",
+        NotConnectedError: "🔌 I'm not connected to a voice channel!",
+        AlreadyConnectedError: "🔌 I'm already connected to a voice channel!",
+        VoiceConnectionError: "🔌 Failed to connect to voice channel.",
+        UserNotInVoiceError: "🎤 You need to be in a voice channel!",
+        AudioSourceError: "🎵 There was a problem with the audio source.",
+        AudioPlaybackError: "🎵 Playback error occurred.",
+        AudioDownloadError: "🎵 Failed to download audio.",
+        NoAudioSourceError: "🎵 No audio source available.",
+        ServiceUnavailableError: "⚠️ This service is currently unavailable.",
+        ServiceTimeoutError: "⏱️ Service request timed out. Please try again.",
+        ServiceInitializationError: "⚠️ Service failed to initialize.",
+        ValidationError: "❌ Invalid input provided.",
+        InvalidParameterError: "❌ Invalid parameter value.",
+        MissingParameterError: "❌ Required parameter is missing.",
+        ParameterTypeError: "❌ Parameter has wrong type.",
+        ConfigurationError: "⚙️ Configuration error. Please contact the bot owner.",
+        MissingConfigError: "⚙️ Required configuration is missing.",
+        InvalidConfigError: "⚙️ Configuration value is invalid.",
+        LLMError: "🤖 AI service error occurred.",
+        LLMResponseError: "🤖 AI service returned invalid response.",
+        LLMTimeoutError: "🤖 AI service request timed out.",
+        LLMAPIError: "🤖 AI service API error.",
+        IntentParseError: "🤖 Failed to understand your request.",
+        SynthesisError: "🎼 Music synthesis error occurred.",
+        SynthesisAPIError: "🎼 Music synthesis API error.",
+        SynthesisTimeoutError: "🎼 Music synthesis timed out.",
+        InvalidPromptError: "🎼 Invalid music synthesis prompt.",
+        PlaylistError: "📝 Playlist error occurred.",
+        PlaylistNotFoundError: "📝 Playlist not found.",
+        PlaylistLoadError: "📝 Failed to load playlist.",
+        PlaylistSaveError: "📝 Failed to save playlist.",
+        CacheError: "💾 Cache error occurred.",
+        CacheExpiredError: "💾 Cached data has expired.",
+        CacheFullError: "💾 Cache is full.",
+        ActionExecutionError: "⚡ Action execution error.",
+        InvalidActionError: "⚡ Invalid action type.",
+        ActionParameterError: "⚡ Invalid action parameters.",
+        ActionTimeoutError: "⚡ Action execution timed out.",
+    }
+    
+    # Check if it's a known bot exception
+    if isinstance(exception, BotException):
+        for exc_type, message in friendly_messages.items():
+            if isinstance(exception, exc_type):
+                return message
+        # Generic bot exception - use the exception's message
+        return f"❌ {exception.message}"
+    
+    # Handle discord.py exceptions if discord is available
+    if discord:
+        if isinstance(exception, discord.HTTPException):
+            return "🌐 Discord API error. Please try again."
+        
+        if isinstance(exception, discord.Forbidden):
+            return "🚫 I don't have permission to do that!"
+        
+        if isinstance(exception, discord.NotFound):
+            return "🔍 Resource not found."
+        
+        if isinstance(exception, discord.ConnectionClosed):
+            return "🔌 Voice connection was closed."
+    
+    # Handle common Python exceptions
+    if isinstance(exception, ValueError):
+        return "❌ Invalid value provided."
+    
+    if isinstance(exception, TypeError):
+        return "❌ Invalid type provided."
+    
+    if isinstance(exception, KeyError):
+        return "❌ Required key not found."
+    
+    if isinstance(exception, FileNotFoundError):
+        return "📁 File not found."
+    
+    if isinstance(exception, PermissionError):
+        return "🚫 Permission denied."
+    
+    if isinstance(exception, TimeoutError):
+        return "⏱️ Operation timed out."
+    
+    # Generic error for unknown exceptions
+    return "❌ An unexpected error occurred. Please try again."
 
 
 # Exception hierarchy for reference
