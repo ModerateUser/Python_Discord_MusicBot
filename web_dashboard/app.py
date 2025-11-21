@@ -10,6 +10,7 @@ FIXES APPLIED:
 - FIX GUI #5: Fix LLM service initialization
 - FIX WEBUI #1: Fix config import to handle missing/malformed config gracefully
 - FIX WEBUI #2: Replace deprecated on_event with modern lifespan handler
+- FIX WEBUI #5: Integrate with dashboard bridge for real-time bot data
 """
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
@@ -120,7 +121,8 @@ bot_state = {
     "uptime": None,
     "start_time": None,
     "version": "1.0.0",
-    "config_error": config_error  # FIX WEBUI #1: Track config errors
+    "config_error": config_error,  # FIX WEBUI #1: Track config errors
+    "bridge_connected": False  # FIX WEBUI #5: Track bridge connection
 }
 
 # WebSocket connections for real-time updates
@@ -137,11 +139,38 @@ class ConnectionManager:
         await websocket.accept()
         self.active_connections.append(websocket)
         logger.info(f"WebSocket connected. Total connections: {len(self.active_connections)}")
+        
+        # FIX WEBUI #5: Send initial state when client connects
+        await self.send_initial_state(websocket)
     
     def disconnect(self, websocket: WebSocket):
         if websocket in self.active_connections:
             self.active_connections.remove(websocket)
             logger.info(f"WebSocket disconnected. Total connections: {len(self.active_connections)}")
+    
+    async def send_initial_state(self, websocket: WebSocket):
+        """Send initial state to newly connected client"""
+        try:
+            # Get current state from bridge if available
+            bridge = get_dashboard_bridge()
+            if bridge:
+                status = await bridge.get_bot_status()
+                bot_state.update(status.to_dict())
+                bot_state['bridge_connected'] = True
+                
+                # Get all queues
+                queues = await bridge.get_all_queues()
+                bot_state['queues'] = {
+                    str(q.guild_id): q.to_dict() for q in queues
+                }
+            
+            await websocket.send_json({
+                "type": "initial_state",
+                "data": bot_state,
+                "timestamp": datetime.now().isoformat()
+            })
+        except Exception as e:
+            logger.error(f"Error sending initial state: {e}")
     
     async def broadcast(self, message: dict):
         """Broadcast message to all connected clients"""
@@ -161,6 +190,15 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 
+# FIX WEBUI #5: Import dashboard bridge
+try:
+    from services.dashboard_bridge import get_dashboard_bridge
+except ImportError:
+    logger.warning("Dashboard bridge not available - running in standalone mode")
+    def get_dashboard_bridge():
+        return None
+
+
 # FIX WEBUI #2: Modern lifespan event handler (replaces deprecated on_event)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -178,6 +216,64 @@ async def lifespan(app: FastAPI):
     
     bot_state["start_time"] = datetime.now()
     bot_state["status"] = "dashboard_online"
+    
+    # FIX WEBUI #5: Check for dashboard bridge
+    bridge = get_dashboard_bridge()
+    if bridge:
+        logger.info("✅ Dashboard connected to bot bridge")
+        bot_state["bridge_connected"] = True
+        
+        # Subscribe to bridge updates
+        async def handle_bridge_update(message: dict):
+            """Handle updates from dashboard bridge"""
+            try:
+                # Update bot_state based on message type
+                if message['type'] == 'status_update':
+                    bot_state.update(message['data'])
+                elif message['type'] == 'guild_join':
+                    # Add new guild to list
+                    guild_data = message['data']
+                    bot_state['guilds'].append({
+                        "id": guild_data['guild_id'],
+                        "name": guild_data['guild_name'],
+                        "member_count": guild_data['member_count']
+                    })
+                elif message['type'] == 'guild_remove':
+                    # Remove guild from list
+                    guild_id = message['data']['guild_id']
+                    bot_state['guilds'] = [g for g in bot_state['guilds'] if g['id'] != guild_id]
+                elif message['type'] == 'queue_update':
+                    # Update queue for guild
+                    guild_id = str(message['data']['guild_id'])
+                    queue_info = await bridge.get_guild_queue(int(guild_id))
+                    if queue_info:
+                        bot_state['queues'][guild_id] = queue_info.to_dict()
+                    elif guild_id in bot_state['queues']:
+                        del bot_state['queues'][guild_id]
+                
+                # Broadcast to WebSocket clients
+                await manager.broadcast(message)
+                
+            except Exception as e:
+                logger.error(f"Error handling bridge update: {e}", exc_info=True)
+        
+        bridge.subscribe(handle_bridge_update)
+        
+        # Get initial state
+        try:
+            status = await bridge.get_bot_status()
+            bot_state.update(status.to_dict())
+            
+            # Get all queues
+            queues = await bridge.get_all_queues()
+            bot_state['queues'] = {
+                str(q.guild_id): q.to_dict() for q in queues
+            }
+        except Exception as e:
+            logger.error(f"Error getting initial state from bridge: {e}")
+    else:
+        logger.warning("⚠️ Dashboard running without bot bridge (standalone mode)")
+        bot_state["bridge_connected"] = False
     
     yield  # Application runs here
     
@@ -306,7 +402,8 @@ async def dashboard(request: Request):
             "bot_name": "Discord Music Bot",
             "version": bot_state.get("version", "1.0.0"),
             "status": bot_state.get("status", "offline"),
-            "config_error": config_error  # FIX WEBUI #1: Pass config error to template
+            "config_error": config_error,  # FIX WEBUI #1: Pass config error to template
+            "bridge_connected": bot_state.get("bridge_connected", False)  # FIX WEBUI #5
         })
     except Exception as e:
         logger.error(f"Error rendering dashboard: {e}")
@@ -361,6 +458,7 @@ async def dashboard(request: Request):
                         <div class="info">
                             <strong>Dashboard Status:</strong> Online<br>
                             <strong>Bot Status:</strong> {bot_state.get("status", "offline")}<br>
+                            <strong>Bridge Connected:</strong> {'Yes' if bot_state.get("bridge_connected") else 'No'}<br>
                             <strong>Version:</strong> {bot_state.get("version", "1.0.0")}
                         </div>
                         
@@ -376,7 +474,7 @@ async def dashboard(request: Request):
                         <ol>
                             <li>Create a <code>config.json</code> file in the project root</li>
                             <li>Add your Discord bot token and owner ID</li>
-                            <li>Restart the bot</li>
+                            <li>Run <code>python bot_with_dashboard.py</code> for integrated mode</li>
                         </ol>
                         
                         <p><a href="/api/config">View current configuration →</a></p>
@@ -467,6 +565,13 @@ async def logs_page(request: Request):
 async def get_status():
     """Get bot status"""
     try:
+        # FIX WEBUI #5: Get live status from bridge if available
+        bridge = get_dashboard_bridge()
+        if bridge:
+            status = await bridge.get_bot_status()
+            return JSONResponse(status.to_dict())
+        
+        # Fallback to cached state
         uptime_str = None
         if bot_state.get("start_time"):
             uptime_seconds = (datetime.now() - bot_state["start_time"]).total_seconds()
@@ -482,7 +587,8 @@ async def get_status():
             "uptime": uptime_str,
             "timestamp": datetime.now().isoformat(),
             "version": bot_state.get("version", "1.0.0"),
-            "config_error": config_error  # FIX WEBUI #1: Include config error in status
+            "config_error": config_error,  # FIX WEBUI #1: Include config error in status
+            "bridge_connected": bot_state.get("bridge_connected", False)  # FIX WEBUI #5
         })
     except Exception as e:
         logger.error(f"Error getting status: {e}", exc_info=True)
@@ -493,7 +599,14 @@ async def get_status():
 async def get_guilds():
     """Get list of guilds"""
     try:
-        guilds = bot_state.get("guilds", [])
+        # FIX WEBUI #5: Get from bridge if available
+        bridge = get_dashboard_bridge()
+        if bridge:
+            status = await bridge.get_bot_status()
+            guilds = status.guilds
+        else:
+            guilds = bot_state.get("guilds", [])
+        
         return JSONResponse({
             "guilds": guilds,
             "count": len(guilds)
@@ -507,6 +620,14 @@ async def get_guilds():
 async def get_queue(guild_id: int):
     """Get queue for specific guild"""
     try:
+        # FIX WEBUI #5: Get from bridge if available
+        bridge = get_dashboard_bridge()
+        if bridge:
+            queue_info = await bridge.get_guild_queue(guild_id)
+            if queue_info:
+                return JSONResponse(queue_info.to_dict())
+        
+        # Fallback to cached state
         queue = bot_state.get("queues", {}).get(str(guild_id))
         if not queue:
             raise HTTPException(status_code=404, detail="Queue not found")
@@ -588,6 +709,21 @@ async def update_config(config_data: dict):
 async def get_llm_status():
     """Get LLM service status"""
     try:
+        # FIX WEBUI #5: Get from bridge if available
+        bridge = get_dashboard_bridge()
+        if bridge:
+            health = await bridge.get_service_health()
+            llm_available = health.get('llm_service', False)
+            
+            if llm_available:
+                return JSONResponse({
+                    "enabled": True,
+                    "provider": "configured",
+                    "available": True,
+                    "message": "LLM service is operational"
+                })
+        
+        # Fallback to config check
         llm_config = getattr(config, 'llm', None)
         if not llm_config:
             return JSONResponse({
@@ -597,24 +733,12 @@ async def get_llm_status():
                 "message": "LLM not configured"
             })
         
-        try:
-            from services.llm_service import LLMService
-            llm = LLMService(llm_config)
-            is_available = await llm.is_available()
-            
-            return JSONResponse({
-                "enabled": llm.enabled,
-                "provider": llm.provider.value if hasattr(llm.provider, 'value') else str(llm.provider),
-                "model": llm.model,
-                "available": is_available
-            })
-        except ImportError:
-            return JSONResponse({
-                "enabled": False,
-                "provider": "error",
-                "available": False,
-                "error": "LLM service module not found"
-            })
+        return JSONResponse({
+            "enabled": llm_config.get('enabled', False),
+            "provider": llm_config.get('provider', 'none'),
+            "available": False,
+            "message": "LLM status unknown (no bridge connection)"
+        })
     except Exception as e:
         logger.error(f"Error in LLM status endpoint: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
@@ -656,12 +780,6 @@ async def websocket_endpoint(websocket: WebSocket):
     """WebSocket endpoint for real-time updates"""
     await manager.connect(websocket)
     try:
-        await websocket.send_json({
-            "type": "initial_state",
-            "data": bot_state,
-            "timestamp": datetime.now().isoformat()
-        })
-        
         while True:
             data = await websocket.receive_text()
             
@@ -675,11 +793,21 @@ async def websocket_endpoint(websocket: WebSocket):
                         "timestamp": datetime.now().isoformat()
                     })
                 elif command_type == "get_status":
-                    await websocket.send_json({
-                        "type": "status",
-                        "data": bot_state,
-                        "timestamp": datetime.now().isoformat()
-                    })
+                    # FIX WEBUI #5: Get live status
+                    bridge = get_dashboard_bridge()
+                    if bridge:
+                        status = await bridge.get_bot_status()
+                        await websocket.send_json({
+                            "type": "status",
+                            "data": status.to_dict(),
+                            "timestamp": datetime.now().isoformat()
+                        })
+                    else:
+                        await websocket.send_json({
+                            "type": "status",
+                            "data": bot_state,
+                            "timestamp": datetime.now().isoformat()
+                        })
                 else:
                     await websocket.send_json({
                         "type": "error",
@@ -704,7 +832,7 @@ async def start_bot():
     """Start the bot (if not running)"""
     return JSONResponse({
         "success": False,
-        "message": "Bot control requires integration with bot process (not yet implemented)"
+        "message": "Bot control through integrated launcher only. Use bot_with_dashboard.py"
     })
 
 
@@ -713,7 +841,7 @@ async def stop_bot():
     """Stop the bot"""
     return JSONResponse({
         "success": False,
-        "message": "Bot control requires integration with bot process (not yet implemented)"
+        "message": "Bot control through integrated launcher only. Use bot_with_dashboard.py"
     })
 
 
@@ -722,7 +850,7 @@ async def restart_bot():
     """Restart the bot"""
     return JSONResponse({
         "success": False,
-        "message": "Bot control requires integration with bot process (not yet implemented)"
+        "message": "Bot control through integrated launcher only. Use bot_with_dashboard.py"
     })
 
 
@@ -742,10 +870,24 @@ async def update_bot_state(new_state: Dict[str, Any]):
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
+    # FIX WEBUI #5: Check bridge health
+    bridge = get_dashboard_bridge()
+    bridge_healthy = False
+    bot_connected = False
+    
+    if bridge:
+        try:
+            health = await bridge.get_service_health()
+            bridge_healthy = health.get('dashboard_bridge', False)
+            bot_connected = health.get('bot', False)
+        except:
+            pass
+    
     return JSONResponse({
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
-        "bot_connected": bot_state.get("connected", False),
+        "bot_connected": bot_connected,
+        "bridge_connected": bridge_healthy,
         "config_loaded": config is not None,
         "config_error": config_error
     })
@@ -769,6 +911,7 @@ if __name__ == "__main__":
         print("   Dashboard will run in limited mode.")
         print()
     
+    print("NOTE: For integrated bot+dashboard, run: python bot_with_dashboard.py")
     print("=" * 70)
     
     try:
