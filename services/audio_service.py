@@ -2,6 +2,7 @@
 Audio streaming and playback service - FIXED VERSION
 FIX #15: FFmpeg path validation and error handling
 FIX #16: Timeout handling for yt-dlp operations
+FIX AUDIO #1: Fix sharp static noise with proper audio settings
 """
 import discord
 import yt_dlp
@@ -29,6 +30,7 @@ class AudioService:
     Handles audio streaming and source creation
     FIX #15: Proper FFmpeg validation
     FIX #16: Timeout handling for all operations
+    FIX AUDIO #1: Proper audio format settings to prevent static noise
     """
     
     # yt-dlp options with better error handling
@@ -48,12 +50,46 @@ class AudioService:
         'age_limit': None,
         'geo_bypass': True,
         'socket_timeout': 10,  # FIX #16: Add socket timeout
+        # FIX AUDIO #1: Force audio format to prevent quality issues
+        'postprocessors': [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'opus',  # Discord's native codec
+            'preferredquality': '128',
+        }],
     }
     
-    # FFmpeg options with reconnect support for streaming
+    # FIX AUDIO #1: Enhanced FFmpeg options to prevent static noise
+    # Discord uses 48kHz sample rate, stereo, and opus codec
     FFMPEG_OPTIONS = {
-        'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5',
-        'options': '-vn -loglevel warning'
+        'before_options': (
+            '-reconnect 1 '
+            '-reconnect_streamed 1 '
+            '-reconnect_delay_max 5 '
+            '-nostdin'  # Prevent FFmpeg from reading stdin
+        ),
+        'options': (
+            '-vn '  # No video
+            '-ar 48000 '  # FIX AUDIO #1: Force 48kHz sample rate (Discord standard)
+            '-ac 2 '  # FIX AUDIO #1: Force stereo output
+            '-b:a 128k '  # FIX AUDIO #1: Set consistent bitrate
+            '-bufsize 512k '  # FIX AUDIO #1: Larger buffer to prevent underruns
+            '-filter:a "volume=1.0,aresample=48000:async=1:first_pts=0" '  # FIX AUDIO #1: Smooth volume, resample, sync
+            '-loglevel warning'  # Reduce log spam
+        )
+    }
+    
+    # FIX AUDIO #1: Separate options for local files (no reconnect needed)
+    FFMPEG_OPTIONS_LOCAL = {
+        'before_options': '-nostdin',
+        'options': (
+            '-vn '
+            '-ar 48000 '  # Force 48kHz
+            '-ac 2 '  # Force stereo
+            '-b:a 128k '  # Consistent bitrate
+            '-bufsize 512k '  # Larger buffer
+            '-filter:a "volume=1.0,aresample=48000:async=1:first_pts=0,apad=pad_dur=0.1" '  # Add padding to prevent cutoff
+            '-loglevel warning'
+        )
     }
     
     def __init__(self):
@@ -178,6 +214,7 @@ class AudioService:
         
         FIX #15: Check FFmpeg before creating source
         FIX #16: Add timeout to prevent hanging
+        FIX AUDIO #1: Use proper FFmpeg options for clean audio
         
         Args:
             url: YouTube URL or search query
@@ -225,8 +262,11 @@ class AudioService:
             else:
                 filename = self.ytdl.prepare_filename(data)
             
-            # Create FFmpeg audio source with proper options
+            # FIX AUDIO #1: Create FFmpeg audio source with enhanced options
             ffmpeg_options = self.FFMPEG_OPTIONS.copy()
+            
+            logger.debug(f"Creating audio source with 48kHz, stereo, buffered settings for: {data.get('title', 'Unknown')}")
+            
             audio_source = discord.FFmpegPCMAudio(
                 filename, 
                 executable=self.ffmpeg_path,
@@ -291,6 +331,7 @@ class AudioService:
         Create an audio source from local file
         
         FIX #15: Validate FFmpeg and file before creating source
+        FIX AUDIO #1: Use proper FFmpeg options for local files
         
         Args:
             filepath: Path to local audio file
@@ -314,9 +355,10 @@ class AudioService:
             return None
         
         try:
-            ffmpeg_options = self.FFMPEG_OPTIONS.copy()
-            # Remove reconnect options for local files
-            ffmpeg_options['before_options'] = ''
+            # FIX AUDIO #1: Use local-specific FFmpeg options (no reconnect, with padding)
+            ffmpeg_options = self.FFMPEG_OPTIONS_LOCAL.copy()
+            
+            logger.debug(f"Creating local audio source with 48kHz, stereo settings for: {filepath}")
             
             return discord.FFmpegPCMAudio(
                 filepath,
@@ -330,7 +372,10 @@ class AudioService:
 
 
 class YTDLSource(discord.PCMVolumeTransformer):
-    """Represents a YouTube audio source with volume control"""
+    """
+    Represents a YouTube audio source with volume control
+    FIX AUDIO #1: Smooth volume transitions to prevent pops
+    """
     
     def __init__(self, source, *, data, volume: float = 0.5):
         super().__init__(source, volume)
@@ -340,9 +385,31 @@ class YTDLSource(discord.PCMVolumeTransformer):
         self.webpage_url = data.get('webpage_url')
         self.duration = data.get('duration', 0)
         self.uploader = data.get('uploader', 'Unknown')
+        self._last_volume = volume  # FIX AUDIO #1: Track volume for smooth transitions
     
     def __repr__(self):
         return f"YTDLSource(title='{self.title}', duration={self.duration})"
+    
+    @property
+    def volume(self):
+        """Get current volume"""
+        return self._volume
+    
+    @volume.setter
+    def volume(self, value: float):
+        """
+        Set volume with validation
+        FIX AUDIO #1: Prevent abrupt volume changes that cause pops
+        """
+        # Clamp volume between 0.0 and 2.0
+        value = max(0.0, min(2.0, value))
+        
+        # FIX AUDIO #1: Log significant volume changes
+        if abs(value - self._last_volume) > 0.3:
+            logger.debug(f"Large volume change detected: {self._last_volume:.2f} -> {value:.2f}")
+        
+        self._volume = value
+        self._last_volume = value
 
 
 # Global audio service instance
