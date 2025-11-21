@@ -1,0 +1,119 @@
+# ============================================
+# SECURITY: Sensitive Configuration Files
+# ============================================
+# Bot configuration - NEVER COMMIT YOUR TOKEN
+config.json
+.env
+.env.local
+*.key
+*.pem
+
+# Playlists (optional - remove this line if you want to version control playlists)
+playlists.json
+
+# ============================================
+# Python Build Artifacts
+# ============================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# ============================================
+# Virtual Environments
+# ============================================
+venv/
+ENV/
+env/
+.venv
+.virtualenv
+
+# ============================================
+# IDEs and Editors
+# ============================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+
+# ============================================
+# Operating System Files
+# ============================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# ============================================
+# Logs and Runtime Data
+# ============================================
+logs/
+*.log
+*.log.*
+
+# ============================================
+# Audio Files (optional)
+# ============================================
+# Uncomment if you don't want to track music files
+# music/
+# *.mp3
+# *.wav
+# *.flac
+# *.ogg
+# *.m4a
+# *.aac
+# *.opus
+
+# ============================================
+# Downloaded/Cached Media
+# ============================================
+*.webm
+*.mp4
+*.part
+*.ytdl
+cache/
+temp/
+tmp/
+
+# ============================================
+# Testing
+# ============================================
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+
+# ============================================
+# Database Files
+# ============================================
+*.db
+*.sqlite
+*.sqlite3
