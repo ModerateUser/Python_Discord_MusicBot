@@ -13,6 +13,7 @@ FIXES APPLIED:
 - FIX WEBUI #5: Integrate with dashboard bridge for real-time bot data
 - FIX BACKEND #1: Add template context helper function
 - FIX BACKEND #2: Add missing API endpoints for dashboard integration
+- FIX MEDIUM #1: Remove config validation bypass, add proper error handling
 """
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
@@ -32,85 +33,33 @@ import os
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-# FIX WEBUI #1: Import config safely without triggering validation
+# FIX MEDIUM #1: Proper config handling without bypass
 config = None
 config_error = None
+config_available = False
 
 try:
-    # Import Config class but don't instantiate yet
     from core.config import Config, ConfigurationError
     
-    # Try to load config without validation (for WebUI display purposes)
     try:
-        config = Config(validate=False)
-        # Try to load the config file
+        # Try to load config properly
+        config = Config()
         config.load()
-    except ConfigurationError as e:
-        config_error = str(e)
-        logging.warning(f"Config validation failed (WebUI will run in limited mode): {e}")
-        # Create a minimal config for WebUI to function
-        config = type('MinimalConfig', (), {
-            'command_prefix': '!',
-            'playing': '!help for commands',
-            'max_queue_size': 100,
-            'max_playlist_size': 500,
-            'allowed_file_extensions': ['.mp3', '.wav', '.flac', '.ogg'],
-            'music_directory': None,
-            'token': None,
-            'owner_id': None,
-            'llm': {'enabled': False},
-            'music_synthesis': {'enabled': False}
-        })()
+        config_available = True
+        logging.info("✅ Configuration loaded successfully")
     except FileNotFoundError:
-        config_error = "Config file not found. Please create config.json"
-        logging.warning("Config file not found - WebUI running in limited mode")
-        # Create a minimal config
-        config = type('MinimalConfig', (), {
-            'command_prefix': '!',
-            'playing': '!help for commands',
-            'max_queue_size': 100,
-            'max_playlist_size': 500,
-            'allowed_file_extensions': ['.mp3', '.wav', '.flac', '.ogg'],
-            'music_directory': None,
-            'token': None,
-            'owner_id': None,
-            'llm': {'enabled': False},
-            'music_synthesis': {'enabled': False}
-        })()
+        config_error = "Configuration file not found. Please create config.json from config.example.json"
+        logging.warning(f"Config file not found - Dashboard running in limited mode")
+    except ConfigurationError as e:
+        config_error = f"Configuration validation failed: {str(e)}"
+        logging.warning(f"Config validation failed: {e}")
     except Exception as e:
-        config_error = f"Unexpected config error: {e}"
-        logging.error(f"Unexpected error loading config: {e}", exc_info=True)
-        # Create a minimal config
-        config = type('MinimalConfig', (), {
-            'command_prefix': '!',
-            'playing': '!help for commands',
-            'max_queue_size': 100,
-            'max_playlist_size': 500,
-            'allowed_file_extensions': ['.mp3', '.wav', '.flac', '.ogg'],
-            'music_directory': None,
-            'token': None,
-            'owner_id': None,
-            'llm': {'enabled': False},
-            'music_synthesis': {'enabled': False}
-        })()
+        config_error = f"Unexpected configuration error: {str(e)}"
+        logging.error(f"Unexpected config error: {e}", exc_info=True)
         
 except ImportError as e:
     config_error = f"Could not import config module: {e}"
-    print(f"ERROR: {config_error}")
-    print("Make sure you're running from the project root directory")
-    # Create a minimal config to allow WebUI to start
-    config = type('MinimalConfig', (), {
-        'command_prefix': '!',
-        'playing': '!help for commands',
-        'max_queue_size': 100,
-        'max_playlist_size': 500,
-        'allowed_file_extensions': ['.mp3', '.wav', '.flac', '.ogg'],
-        'music_directory': None,
-        'token': None,
-        'owner_id': None,
-        'llm': {'enabled': False},
-        'music_synthesis': {'enabled': False}
-    })()
+    logging.error(f"Config import failed: {e}")
 
 logger = logging.getLogger('discord_bot')
 
@@ -123,8 +72,9 @@ bot_state = {
     "uptime": None,
     "start_time": None,
     "version": "1.0.0",
-    "config_error": config_error,  # FIX WEBUI #1: Track config errors
-    "bridge_connected": False  # FIX WEBUI #5: Track bridge connection
+    "config_error": config_error,
+    "config_available": config_available,
+    "bridge_connected": False
 }
 
 # WebSocket connections for real-time updates
@@ -142,7 +92,7 @@ class ConnectionManager:
         self.active_connections.append(websocket)
         logger.info(f"WebSocket connected. Total connections: {len(self.active_connections)}")
         
-        # FIX WEBUI #5: Send initial state when client connects
+        # Send initial state when client connects
         await self.send_initial_state(websocket)
     
     def disconnect(self, websocket: WebSocket):
@@ -192,7 +142,7 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 
-# FIX WEBUI #5: Import dashboard bridge
+# Import dashboard bridge
 try:
     from services.dashboard_bridge import get_dashboard_bridge
 except ImportError:
@@ -201,7 +151,7 @@ except ImportError:
         return None
 
 
-# FIX WEBUI #2: Modern lifespan event handler (replaces deprecated on_event)
+# Modern lifespan event handler
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
@@ -214,12 +164,13 @@ async def lifespan(app: FastAPI):
     logger.info(f"Static directory: {static_dir}")
     
     if config_error:
-        logger.warning(f"Dashboard started with config error: {config_error}")
+        logger.warning(f"⚠️ Dashboard started with config error: {config_error}")
+        logger.warning("⚠️ Dashboard will run in limited mode - bot features unavailable")
     
     bot_state["start_time"] = datetime.now()
     bot_state["status"] = "dashboard_online"
     
-    # FIX WEBUI #5: Check for dashboard bridge
+    # Check for dashboard bridge
     bridge = get_dashboard_bridge()
     if bridge:
         logger.info("✅ Dashboard connected to bot bridge")
@@ -295,7 +246,7 @@ app = FastAPI(
     title="Discord Music Bot Dashboard",
     description="Web-based control panel for Discord Music Bot",
     version="1.0.0",
-    lifespan=lifespan  # FIX WEBUI #2: Use modern lifespan handler
+    lifespan=lifespan
 )
 
 # CORS middleware
@@ -315,7 +266,7 @@ if not templates_dir.exists():
 
 templates = Jinja2Templates(directory=str(templates_dir))
 
-# FIX GUI #1: Only mount static directory if it exists
+# Only mount static directory if it exists
 static_dir = Path(__file__).parent / "static"
 if static_dir.exists():
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
@@ -378,6 +329,14 @@ body {
     color: #c00;
 }
 
+.warning {
+    background: #ffc;
+    border: 1px solid #fc6;
+    padding: 10px;
+    border-radius: 5px;
+    color: #c60;
+}
+
 button {
     background: #667eea;
     color: white;
@@ -396,7 +355,7 @@ button:hover {
 
 
 # ============================================================================
-# FIX BACKEND #1: TEMPLATE CONTEXT HELPER
+# TEMPLATE CONTEXT HELPER
 # ============================================================================
 
 def get_template_context(request: Request, **kwargs):
@@ -406,13 +365,14 @@ def get_template_context(request: Request, **kwargs):
         "bot_name": "Discord Music Bot",
         "version": bot_state.get("version", "1.0.0"),
         "config_error": config_error,
+        "config_available": config_available,
         "bridge_connected": bot_state.get("bridge_connected", False),
         **kwargs
     }
 
 
 # ============================================================================
-# TEMPLATE RENDERING ROUTES (Updated to use helper)
+# TEMPLATE RENDERING ROUTES
 # ============================================================================
 
 @app.get("/", response_class=HTMLResponse)
@@ -452,6 +412,14 @@ async def dashboard(request: Request):
                             color: #c00;
                             margin: 20px 0;
                         }}
+                        .warning {{
+                            background: #ffc;
+                            border: 1px solid #fc6;
+                            padding: 15px;
+                            border-radius: 5px;
+                            color: #c60;
+                            margin: 20px 0;
+                        }}
                         .info {{
                             background: #eff;
                             border: 1px solid #cef;
@@ -471,10 +439,13 @@ async def dashboard(request: Request):
                         
                         {'<div class="error"><strong>⚠️ Configuration Error:</strong><br>' + config_error + '</div>' if config_error else ''}
                         
+                        {'<div class="warning"><strong>⚠️ Limited Mode:</strong><br>Dashboard is running without proper configuration. Bot features are unavailable.</div>' if not config_available else ''}
+                        
                         <div class="info">
                             <strong>Dashboard Status:</strong> Online<br>
                             <strong>Bot Status:</strong> {bot_state.get("status", "offline")}<br>
                             <strong>Bridge Connected:</strong> {'Yes' if bot_state.get("bridge_connected") else 'No'}<br>
+                            <strong>Configuration:</strong> {'Loaded' if config_available else 'Missing/Invalid'}<br>
                             <strong>Version:</strong> {bot_state.get("version", "1.0.0")}
                         </div>
                         
@@ -489,7 +460,9 @@ async def dashboard(request: Request):
                         <h2>Setup Instructions</h2>
                         <ol>
                             <li>Create a <code>config.json</code> file in the project root</li>
+                            <li>Copy settings from <code>config.example.json</code></li>
                             <li>Add your Discord bot token and owner ID</li>
+                            <li>Configure other settings as needed</li>
                             <li>Run <code>python bot_with_dashboard.py</code> for integrated mode</li>
                         </ol>
                         
@@ -573,14 +546,14 @@ async def logs_page(request: Request):
 
 
 # ============================================================================
-# EXISTING API ENDPOINTS
+# API ENDPOINTS
 # ============================================================================
 
 @app.get("/api/status")
 async def get_status():
     """Get bot status"""
     try:
-        # FIX WEBUI #5: Get live status from bridge if available
+        # Get live status from bridge if available
         bridge = get_dashboard_bridge()
         if bridge:
             status = await bridge.get_bot_status()
@@ -602,8 +575,9 @@ async def get_status():
             "uptime": uptime_str,
             "timestamp": datetime.now().isoformat(),
             "version": bot_state.get("version", "1.0.0"),
-            "config_error": config_error,  # FIX WEBUI #1: Include config error in status
-            "bridge_connected": bot_state.get("bridge_connected", False)  # FIX WEBUI #5
+            "config_error": config_error,
+            "config_available": config_available,
+            "bridge_connected": bot_state.get("bridge_connected", False)
         })
     except Exception as e:
         logger.error(f"Error getting status: {e}", exc_info=True)
@@ -614,7 +588,7 @@ async def get_status():
 async def get_guilds():
     """Get list of guilds"""
     try:
-        # FIX WEBUI #5: Get from bridge if available
+        # Get from bridge if available
         bridge = get_dashboard_bridge()
         if bridge:
             status = await bridge.get_bot_status()
@@ -635,7 +609,7 @@ async def get_guilds():
 async def get_queue(guild_id: int):
     """Get queue for specific guild"""
     try:
-        # FIX WEBUI #5: Get from bridge if available
+        # Get from bridge if available
         bridge = get_dashboard_bridge()
         if bridge:
             queue_info = await bridge.get_guild_queue(guild_id)
@@ -658,14 +632,15 @@ async def get_queue(guild_id: int):
 async def get_config():
     """Get current configuration (sanitized)"""
     try:
-        # FIX WEBUI #1: Handle config safely
-        if config is None:
+        # FIX MEDIUM #1: Proper config handling
+        if not config_available or config is None:
             return JSONResponse({
-                "error": "Configuration not loaded",
-                "config_error": config_error
-            })
+                "error": "Configuration not available",
+                "config_error": config_error,
+                "message": "Please create and configure config.json"
+            }, status_code=503)
         
-        # FIX GUI #2: Handle config attributes safely
+        # Return sanitized config data
         config_data = {
             "command_prefix": getattr(config, 'command_prefix', '!'),
             "playing": getattr(config, 'playing', '!help for commands'),
@@ -675,7 +650,7 @@ async def get_config():
             "music_directory": getattr(config, 'music_directory', None),
             "token_set": bool(getattr(config, 'token', None)),
             "owner_id_set": bool(getattr(config, 'owner_id', None)),
-            "config_error": config_error  # FIX WEBUI #1: Include error info
+            "config_available": True
         }
         
         # Add LLM config if available
@@ -724,7 +699,7 @@ async def update_config(config_data: dict):
 async def get_llm_status():
     """Get LLM service status"""
     try:
-        # FIX WEBUI #5: Get from bridge if available
+        # Get from bridge if available
         bridge = get_dashboard_bridge()
         if bridge:
             health = await bridge.get_service_health()
@@ -739,6 +714,14 @@ async def get_llm_status():
                 })
         
         # Fallback to config check
+        if not config_available or config is None:
+            return JSONResponse({
+                "enabled": False,
+                "provider": "none",
+                "available": False,
+                "message": "Configuration not available"
+            })
+        
         llm_config = getattr(config, 'llm', None)
         if not llm_config:
             return JSONResponse({
@@ -791,7 +774,7 @@ async def get_logs(lines: int = 100):
 
 
 # ============================================================================
-# FIX BACKEND #2: NEW API ENDPOINTS - Dashboard Integration
+# DASHBOARD INTEGRATION ENDPOINTS
 # ============================================================================
 
 @app.post("/api/guild/{guild_id}/command")
@@ -878,11 +861,13 @@ async def get_all_services_health():
                 "dashboard": True,
                 "bridge": False,
                 "bot": False,
+                "config": config_available,
                 "message": "Dashboard running in standalone mode"
             })
         
         health = await bridge.get_service_health()
-        health["dashboard"] = True  # Dashboard is always healthy if responding
+        health["dashboard"] = True
+        health["config"] = config_available
         
         return JSONResponse(health)
     except Exception as e:
@@ -936,7 +921,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         "timestamp": datetime.now().isoformat()
                     })
                 elif command_type == "get_status":
-                    # FIX WEBUI #5: Get live status
+                    # Get live status
                     bridge = get_dashboard_bridge()
                     if bridge:
                         status = await bridge.get_bot_status()
@@ -1021,7 +1006,7 @@ async def update_bot_state(new_state: Dict[str, Any]):
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
-    # FIX WEBUI #5: Check bridge health
+    # Check bridge health
     bridge = get_dashboard_bridge()
     bridge_healthy = False
     bot_connected = False
@@ -1039,7 +1024,7 @@ async def health_check():
         "timestamp": datetime.now().isoformat(),
         "bot_connected": bot_connected,
         "bridge_connected": bridge_healthy,
-        "config_loaded": config is not None,
+        "config_loaded": config_available,
         "config_error": config_error
     })
 
@@ -1060,6 +1045,13 @@ if __name__ == "__main__":
         print("⚠️  WARNING: Configuration Error Detected")
         print(f"   {config_error}")
         print("   Dashboard will run in limited mode.")
+        print("   Bot features will be unavailable.")
+        print()
+    
+    if not config_available:
+        print()
+        print("⚠️  NOTICE: Running in Standalone Mode")
+        print("   Create config.json to enable bot integration")
         print()
     
     print("NOTE: For integrated bot+dashboard, run: python bot_with_dashboard.py")
