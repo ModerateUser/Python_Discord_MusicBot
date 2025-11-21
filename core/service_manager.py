@@ -49,9 +49,10 @@ class ServiceManager:
         logger.info("✅ All services initialized")
     
     async def _initialize_audio_service(self) -> None:
-        """Initialize enhanced audio service"""
+        """Initialize consolidated audio service"""
         try:
-            from services.audio_service_enhanced import AudioService
+            # UPDATED: Import from consolidated audio_service.py
+            from services.audio_service import AudioService
             
             audio_service = AudioService(thread_pool_size=4)
             self.container.register('audio_service', audio_service)
@@ -131,6 +132,17 @@ class ServiceManager:
             logger.warning(f"Service not found: {name}")
             return None
     
+    def register_service(self, name: str, service: Any) -> None:
+        """
+        Register a service manually
+        
+        Args:
+            name: Service name
+            service: Service instance
+        """
+        self.container.register(name, service)
+        logger.info(f"✅ Service registered: {name}")
+    
     def is_service_available(self, name: str) -> bool:
         """
         Check if a service is available
@@ -173,6 +185,9 @@ class ServiceManager:
         # Check advanced AI service
         health['advanced_ai_service'] = self.is_service_available('advanced_ai_service')
         
+        # Check dashboard bridge
+        health['dashboard_bridge'] = self.is_service_available('dashboard_bridge')
+        
         return health
     
     async def shutdown_all(self) -> None:
@@ -183,7 +198,7 @@ class ServiceManager:
         audio_service = self.get_service('audio_service')
         if audio_service and hasattr(audio_service, 'shutdown'):
             try:
-                audio_service.shutdown()
+                await audio_service.shutdown()
                 logger.info("✅ Audio service shutdown")
             except Exception as e:
                 logger.error(f"Error shutting down audio service: {e}")
