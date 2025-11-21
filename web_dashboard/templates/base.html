@@ -7,10 +7,10 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        /* Custom Tailwind Configuration */
+        /* Custom Tailwind Configuration - DARKER THEME */
         @layer base {
             body {
-                @apply bg-gray-900 text-gray-100;
+                @apply bg-gray-950 text-gray-100;
             }
         }
 
@@ -25,7 +25,7 @@
         }
         .card:hover { 
             transform: translateY(-2px);
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
         }
         
         /* Pulse Animation */
@@ -43,14 +43,14 @@
             height: 10px;
         }
         ::-webkit-scrollbar-track {
-            background: #1f2937;
+            background: #0a0a0a;
         }
         ::-webkit-scrollbar-thumb {
-            background: #4b5563;
+            background: #374151;
             border-radius: 5px;
         }
         ::-webkit-scrollbar-thumb:hover {
-            background: #6b7280;
+            background: #4b5563;
         }
 
         /* Navigation Active State */
@@ -120,12 +120,28 @@
             100% { transform: rotate(360deg); }
         }
 
+        /* Toast Notification Animation */
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        
+        .toast-notification {
+            animation: slideIn 0.3s ease-out;
+        }
+
         {% block extra_styles %}{% endblock %}
     </style>
 </head>
 <body class="min-h-screen flex flex-col">
     <!-- Navigation -->
-    <nav class="bg-gray-800 border-b border-gray-700 sticky top-0 z-50">
+    <nav class="bg-gray-900 border-b border-gray-800 sticky top-0 z-50">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex items-center justify-between h-16">
                 <!-- Logo and Brand -->
@@ -136,16 +152,16 @@
                 
                 <!-- Navigation Links -->
                 <div class="flex space-x-2">
-                    <a href="/" class="nav-link px-3 py-2 rounded-md text-sm font-medium text-gray-300 hover:bg-gray-700 hover:text-white transition-colors {% if request.path == '/' %}nav-link-active{% endif %}">
+                    <a href="/" class="nav-link px-3 py-2 rounded-md text-sm font-medium text-gray-300 hover:bg-gray-800 hover:text-white transition-colors {% if request.path == '/' %}nav-link-active{% endif %}">
                         <i class="fas fa-home mr-1"></i>Dashboard
                     </a>
-                    <a href="/config" class="nav-link px-3 py-2 rounded-md text-sm font-medium text-gray-300 hover:bg-gray-700 hover:text-white transition-colors {% if request.path == '/config' %}nav-link-active{% endif %}">
+                    <a href="/config" class="nav-link px-3 py-2 rounded-md text-sm font-medium text-gray-300 hover:bg-gray-800 hover:text-white transition-colors {% if request.path == '/config' %}nav-link-active{% endif %}">
                         <i class="fas fa-cog mr-1"></i>Config
                     </a>
-                    <a href="/logs" class="nav-link px-3 py-2 rounded-md text-sm font-medium text-gray-300 hover:bg-gray-700 hover:text-white transition-colors {% if request.path == '/logs' %}nav-link-active{% endif %}">
+                    <a href="/logs" class="nav-link px-3 py-2 rounded-md text-sm font-medium text-gray-300 hover:bg-gray-800 hover:text-white transition-colors {% if request.path == '/logs' %}nav-link-active{% endif %}">
                         <i class="fas fa-file-alt mr-1"></i>Logs
                     </a>
-                    <a href="/api/docs" target="_blank" class="nav-link px-3 py-2 rounded-md text-sm font-medium text-gray-300 hover:bg-gray-700 hover:text-white transition-colors">
+                    <a href="/api/docs" target="_blank" class="nav-link px-3 py-2 rounded-md text-sm font-medium text-gray-300 hover:bg-gray-800 hover:text-white transition-colors">
                         <i class="fas fa-book mr-1"></i>API
                     </a>
                 </div>
@@ -161,7 +177,7 @@
     </main>
 
     <!-- Footer -->
-    <footer class="bg-gray-800 border-t border-gray-700 mt-auto">
+    <footer class="bg-gray-900 border-t border-gray-800 mt-auto">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
             <div class="flex items-center justify-between flex-wrap gap-4">
                 <div class="flex items-center space-x-4">
@@ -267,13 +283,18 @@
             }
         }
 
-        // Show notification
+        // Show notification toast
         function showNotification(message, type = 'info') {
             const notification = document.createElement('div');
-            notification.className = `fixed top-20 right-4 p-4 rounded-lg shadow-lg z-50 alert-${type} animate-slide-in`;
+            notification.className = `fixed top-20 right-4 p-4 rounded-lg shadow-lg z-50 alert-${type} toast-notification`;
+            
+            const icon = type === 'success' ? 'check-circle' : 
+                        type === 'danger' ? 'exclamation-circle' : 
+                        type === 'warning' ? 'exclamation-triangle' : 'info-circle';
+            
             notification.innerHTML = `
                 <div class="flex items-center space-x-2">
-                    <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'danger' ? 'exclamation-circle' : 'info-circle'}"></i>
+                    <i class="fas fa-${icon}"></i>
                     <span>${message}</span>
                 </div>
             `;
@@ -282,6 +303,7 @@
             setTimeout(() => {
                 notification.style.opacity = '0';
                 notification.style.transform = 'translateX(100%)';
+                notification.style.transition = 'all 0.3s ease-out';
                 setTimeout(() => notification.remove(), 300);
             }, 3000);
         }
