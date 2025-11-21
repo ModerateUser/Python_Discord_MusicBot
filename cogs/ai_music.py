@@ -1,6 +1,7 @@
 """
 AI-Enhanced Music Commands
 Natural language music search and recommendations powered by LLM
+FIX #1: Removed 'info' alias to prevent conflict with bot.py info command
 """
 import discord
 from discord.ext import commands
@@ -20,8 +21,9 @@ class AIMusicCog(commands.Cog, name="AI Music"):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
         
-        # Initialize LLM service from bot config
-        llm_config = getattr(bot, 'llm_config', None)
+        # FIX #4: Get LLM config from global config instead of bot attribute
+        from core.config import config
+        llm_config = config.llm_config
         self.llm = create_llm_service(llm_config)
         
         logger.info("AI Music cog loaded")
@@ -156,11 +158,14 @@ class AIMusicCog(commands.Cog, name="AI Music"):
             )
             await thinking_msg.edit(content=None, embed=embed)
     
-    @commands.command(name='songinfo', aliases=['info'])
+    @commands.command(name='songinfo')
     @commands.cooldown(1, 3, commands.BucketType.user)
     async def song_info(self, ctx: commands.Context, *, song_title: str):
         """
         Get AI-powered information about a song
+        
+        FIX #1: Removed 'info' alias to prevent conflict with bot.py
+        Use !songinfo instead of !info
         
         Example:
             !songinfo Bohemian Rhapsody
