@@ -3,6 +3,7 @@ Audio streaming and playback service - FIXED VERSION
 FIX #15: FFmpeg path validation and error handling
 FIX #16: Timeout handling for yt-dlp operations
 FIX AUDIO #1: Fix sharp static noise with proper audio settings
+FIX BUG #6: Initialize _last_volume before super().__init__ to prevent AttributeError
 """
 import discord
 import yt_dlp
@@ -375,17 +376,24 @@ class YTDLSource(discord.PCMVolumeTransformer):
     """
     Represents a YouTube audio source with volume control
     FIX AUDIO #1: Smooth volume transitions to prevent pops
+    FIX BUG #6: Initialize _last_volume BEFORE calling super().__init__
     """
     
     def __init__(self, source, *, data, volume: float = 0.5):
+        # FIX BUG #6: Initialize _last_volume BEFORE calling super().__init__
+        # because super().__init__ will call the volume setter which needs _last_volume
+        self._last_volume = volume
+        
+        # Now call parent constructor which will set volume via the property setter
         super().__init__(source, volume)
+        
+        # Set data attributes
         self.data = data
         self.title = data.get('title', 'Unknown')
         self.url = data.get('url')
         self.webpage_url = data.get('webpage_url')
         self.duration = data.get('duration', 0)
         self.uploader = data.get('uploader', 'Unknown')
-        self._last_volume = volume  # FIX AUDIO #1: Track volume for smooth transitions
     
     def __repr__(self):
         return f"YTDLSource(title='{self.title}', duration={self.duration})"
@@ -405,6 +413,7 @@ class YTDLSource(discord.PCMVolumeTransformer):
         value = max(0.0, min(2.0, value))
         
         # FIX AUDIO #1: Log significant volume changes
+        # FIX BUG #6: _last_volume is now guaranteed to exist
         if abs(value - self._last_volume) > 0.3:
             logger.debug(f"Large volume change detected: {self._last_volume:.2f} -> {value:.2f}")
         
