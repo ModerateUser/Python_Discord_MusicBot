@@ -43,7 +43,18 @@ class Config:
                     data = json.load(f)
                     
                     self.token = data.get('token', '')
-                    self.owner_id = data.get('owner_id', 0)
+                    
+                    # Convert owner_id to int if it's a string
+                    owner_id_raw = data.get('owner_id', 0)
+                    if isinstance(owner_id_raw, str):
+                        try:
+                            self.owner_id = int(owner_id_raw)
+                        except ValueError:
+                            logger.error(f"Invalid owner_id in config.json: {owner_id_raw}")
+                            self.owner_id = 0
+                    else:
+                        self.owner_id = owner_id_raw
+                    
                     self.playing = data.get('playing', '!help for commands')
                     self.command_prefix = data.get('command_prefix', '!')
                     
